@@ -1,5 +1,7 @@
 """Look-Up Tables for VIIRS Snow Metric Computations"""
 
+short_name = "VNP10A1F"
+
 parameter_sets = {"dev_params": {"bbox": "-148,65,-147,66",
               "start_date": "2015-01-01",
               "end_date": "2016-12-31"},

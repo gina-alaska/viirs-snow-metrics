@@ -1,9 +1,9 @@
 # VIIRS Snow Metrics for Alaska
 
 ## Development Setup
-Placeholder: `conda env`
+Placeholder: `conda env` setup instructions
 
-Developers will need to set the following environment variables:
+Developers and users must set the following environment variables:
 ### Directory Structure
 These variables will be ready by the configuration file. If the directories do not exist they will be created for you at runtime.
 ##### `INPUT_DIR`
@@ -17,13 +17,13 @@ Set to the path where you will read/write preprocessed data prior to computation
 export SCRATCH_DIR=$HOME/VIIRS_snow_metrics/scratch
 ```
 ##### `OUTPUT_DIR`
-Set to a path where you will write the snow metric output to disks. Consider using a shared disk location so multiple users can examine the output data.
+Set to a path where you will write the snow metric outputs to disk. Consider using a shared disk location so multiple users can examine the output data.
 ```sh
 export OUTPUT_DIR=/some_shared_disk/VIIRS_snow_metrics
 ``` 
 ### Runtime Options
-##### `DEV_MODE`
-Set to True (note this will be passed as a `string` type rather than `bool`) to work on a smaller chunk of data both spatially and temporally for the purpose of improving development speed. This will default to True. Setting to False will trigger a production run.
+##### `DEV_MODE` (optional)
+Set to True (note this will be passed as a `string` type rather than `bool`) to work on a smaller chunk of data both spatially and temporally for the purpose of improving development speed. Default is True. Setting to False will trigger a production run.
 ```sh
 export DEV_MODE=True
 ```

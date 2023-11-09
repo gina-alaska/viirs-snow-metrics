@@ -32,12 +32,11 @@ else:
     DEV_MODE = True
 
 if not DEV_MODE:
-    print("Operating in production mode.")
     params = parameter_sets["prod_params"]
-
+    print("Operating in production mode with the following parameters:")
+    print(params)
 else:
-    print("Operating in development mode.")
     params = parameter_sets["dev_params"]
-
-print(params)
+    print("Operating in development mode with the following parameters:")
+    print(params)
 
