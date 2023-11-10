@@ -7,7 +7,7 @@ Developers and users must set the following environment variables:
 ### Directory Structure
 These variables will be ready by the configuration file. If the directories do not exist they will be created for you at runtime.
 ##### `INPUT_DIR`
-Set to a path where you will download input data from NSIDC. Anticpate needing 10GB disk space per year for the full AK domain. Something like:
+Set to a path where you will download input data from NSIDC. Anticpate needing around 10GB disk space per year for the full AK domain. For a production run there are 82,003 granules of VNP10A1F version 2 totaling ~192 GB, so the download directory (`INPUT_DIR`) needs at least 200 GB free space for a full run. Example:
 ```sh
 export INPUT_DIR=/big_imaginary_disks/VIIRS_L3_snow_cover
 ```
