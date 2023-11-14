@@ -1,4 +1,4 @@
-"""Download VIIRS Data from the NSIDC DAAC"""
+"""Download VIIRS Data from the NSIDC DAAC. See https://github.com/nsidc/NSIDC-Data-Access-Notebook for reference - this module uses large amounts of code from notebook examples within that repo."""
 
 import requests
 import getpass
@@ -11,6 +11,7 @@ import os
 import shutil
 import pprint
 import re
+import sys
 import time
 import logging
 from requests.auth import HTTPBasicAuth
@@ -19,12 +20,6 @@ from xml.etree import ElementTree as ET
 
 from luts import short_name
 from config import viirs_params, INPUT_DIR
-
-# Class API session
-# version
-# is active
-# start / stop functions handle is_active state
-# make request
 
 
 def check_data_version(ds_short_name):
@@ -50,8 +45,16 @@ def start_api_session(ds_short_name, ds_latest_version):
     session = requests.session()
     s = session.get(capability_url)
     response = session.get(s.url, auth=(uid, pswd))
-    logging.info(response)
-    return session
+    if response.status_code != 200:
+        auth_fail_msg = f"API authentication failed with status code {response.status_code}, exiting program."
+        print(auth_fail_msg)
+        logging.error(auth_fail_msg)
+        sys.exit(1)
+    else:
+        auth_pass_msg = f"{response.status_code}, API authentication successful."
+        print(auth_pass_msg)
+        logging.info(auth_pass_msg)
+        return session
 
 
 def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
@@ -91,7 +94,7 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
     logging.info(
         f"The average size of each granule is {mean(granule_sizes):.2f} MB and the total size of all {len(granules)} granules is {sum(granule_sizes):.2f} MB"
     )
-    # CP commenting out because this is well, very granular
+    # CP note: `results` has low-level meta for all granules, retaining for debugging
     # logging.info(results)
     return granules
 
@@ -132,14 +135,13 @@ def construct_request(
         "version": ds_latest_version,
         "temporal": f"{tstart},{tstop}",
         "bounding_box": bbox,
-        "format": "GeoTIFF",  # NetCDF4-CF also viable, though failed to return data in an early test
+        "format": "GeoTIFF",  # NetCDF4-CF also viable but failed to return data in test
         "projection": "GEOGRAPHIC",
         "page_size": pg_size,
         "request_mode": req_mode,
-        "agent": "",  # may need to retain empty string value
     }
 
-    # Convert to string: could use urllib quote - but will follow NSIDC example
+    # CP note: could use urllib quote - but will follow NSIDC example
     dl_string = "&".join("{!s}={!r}".format(k, v) for (k, v) in dl_param_dict.items())
     dl_string = dl_string.replace("'", "")
 
@@ -149,28 +151,31 @@ def construct_request(
         page_val = i + 1
         api_request = f"{base_url}?{dl_string}&page_num={page_val}"
         endpoint_list.append(api_request)
-
-    logging.info(*endpoint_list)
-    # we may not end up needing the list of endpoints, as the ordering function can use the dl_param_dict to construct the orders, in that case we wouldn't return them, but log them for reference or sharing
+        logging.info(f"Request endpoint: {api_request}")
+    # CP note: may not need the list of endpoints to download data because the ordering function can use the dl_param_dict to construct the orders as well. retain for logging or sharing
     return endpoint_list, dl_param_dict
 
 
 def wipe_old_downloads():
-    # probably want to wipe previously downloaded data if there
-    # check nws-drought repo maybe for example
-    # maybe ask user to confirm
+    """Wipe prior downloads. Our lives are easier if we assume all data in INPUT_DIR is non-duplicate and is consistent for a procesing run."""
+    try:
+        shutil.rmtree(INPUT_DIR)
+    except:
+        pass
+    # alert user, ask for confirmation
+    #
     return None
 
 
 def make_async_data_orders(n_orders, session, dl_param_dict):
-    # make the download 'orders' because the API will need to verify the order and do some processing before making it ready for download
+    # make the download orders because the API will need to verify the order and do some processing before making it ready for download
     # we have to pass an authenticated session to the scope of this function
 
     base_url = "https://n5eil02u.ecs.nsidc.org/egi/request"
     # Request data service for each page number i.e. order
     for i in range(n_orders):
         page_val = i + 1
-        logging.info(f"Order: {page_val}")
+        logging.info(f"Async Data Order: {page_val}")
 
         dl_param_dict["page_num"] = page_val
         request = session.get(base_url, params=dl_param_dict)
@@ -235,30 +240,71 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
             for message in loop_root.findall("./processInfo/"):
                 logging.error(message)
 
-        # Download zipped order if status is complete or complete_with_errors
-        if status == "complete" or status == "complete_with_errors":
+        if status == "complete":
             download_url = "https://n5eil02u.ecs.nsidc.org/esir/" + orderID + ".zip"
-            logging.info(f"Zip download URL: {download_url}")
+            logging.info(f"Zip download URL for order {orderID}: {download_url}")
             return download_url
         else:
             logging.error("Request failed.")
 
 
-# def download_order(download_url):
-#         logging.info("Beginning download of zipped output...")
-#         zip_response = session.get(download_url)
-#         # Raise bad request: Loop will stop for bad response code.
-#         zip_response.raise_for_status()
-#         with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
-#             z.extractall(path)
-#         logging.info("Data request", page_val, "is complete.")  # log this
+def make_streaming_data_order(page_num, session, dl_param_dict, dl_path):
+    base_url = "https://n5eil02u.ecs.nsidc.org/egi/request"
+
+    for i in range(page_num):
+        page_val = i + 1
+        print("Streaming Data Order: ", page_val)
+        request = session.get(base_url, params=dl_param_dict)
+        print("HTTP response from order URL: ", request.status_code)
+        request.raise_for_status()
+        d = request.headers["content-disposition"]
+        fname = re.findall("filename=(.+)", d)
+        dirname = os.path.join(dl_path, fname[0].strip('"'))
+        print("Downloading...")
+        open(dirname, "wb").write(request.content)
+        print("Data request", page_val, "is complete.")
+
+    # Unzip outputs
+    for z in os.listdir(path):
+        if z.endswith(".zip"):
+            zip_name = path + "/" + z
+            zip_ref = zipfile.ZipFile(zip_name)
+            zip_ref.extractall(path)
+            zip_ref.close()
+            os.remove(zip_name)
+
+
+def download_order(session, download_url, dl_path):
+    logging.info("Beginning download of zipped output...")
+    zip_response = session.get(download_url)
+    # Raise bad request: Loop will stop for bad response code.
+    zip_response.raise_for_status()
+    with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
+        z.extractall(dl_path)
+    logging.info("Data request is complete.")
+
+
+def flatten_download_directory(dl_path):
+    """Clean up downloads by removing individual granule folders."""
+    logging.info("Flattening data from nested directories...")
+    for root, dirs, files in os.walk(dl_path, topdown=False):
+        for file in files:
+            try:
+                shutil.move(os.path.join(root, file), dl_path)
+            except OSError:
+                pass
+        for name in dirs:
+            os.rmdir(os.path.join(root, name))
+
+    logging.info(f"{dl_path} now a flat directory.")
 
 
 if __name__ == "__main__":
     logging.basicConfig(filename="download.log", level=logging.INFO)
+
     v = check_data_version(short_name)
     api_session = start_api_session(short_name, v)
-    # bail if session fails
+
     granule_list = search_granules(
         v,
         short_name,
@@ -283,4 +329,8 @@ if __name__ == "__main__":
         print(dl_url)
     else:
         print("streaming mode")
-    print("Download Script Complete")
+        dl_url = make_streaming_data_order(page_num, api_session, dl_params)
+
+    download_order(api_session, dl_url, INPUT_DIR)
+    flatten_download_directory(INPUT_DIR)
+    print("Download Script Complete.")
