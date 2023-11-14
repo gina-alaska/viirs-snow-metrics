@@ -1,7 +1,14 @@
 # VIIRS Snow Metrics for Alaska
 
 ## Development Setup
-Placeholder: `conda env` setup instructions
+Create the conda environment from the `environment.yml` file if you have not done so already.
+```sh
+conda env create -f environment.yml
+```
+Activate the environment:
+```sh
+conda activate viirs-snow
+```
 
 Developers and users must set the following environment variables:
 ### Directory Structure
