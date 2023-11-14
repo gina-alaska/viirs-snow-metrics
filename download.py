@@ -2,19 +2,16 @@
 
 import requests
 import getpass
-import socket
 import json
 import zipfile
 import io
 import math
 import os
 import shutil
-import pprint
 import re
 import sys
 import time
 import logging
-from requests.auth import HTTPBasicAuth
 from statistics import mean
 from xml.etree import ElementTree as ET
 
@@ -22,8 +19,46 @@ from luts import short_name
 from config import viirs_params, INPUT_DIR
 
 
+def wipe_old_downloads(dl_path):
+    """Wipe prior downloads but retain the target directory. Processing pipeline is simplified with assumption that all data in `INPUT_DIR` maps to a single cohesive processing run.
+
+    Args:
+        dl_path (pathlib.Path): The path to the download directory.
+
+    Returns:
+        None
+    """
+    with os.scandir(dl_path) as item:
+        if any(item):
+            print(f"The target path {dl_path} for the download is not empty.")
+            user_input = input(
+                "Wipe the contents of the target download directory? (y/n): "
+            ).lower()
+            if user_input == "y":
+                for filename in os.listdir(dl_path):
+                    filepath = os.path.join(dl_path, filename)
+                    try:
+                        shutil.rmtree(filepath)
+                    except OSError:
+                        os.remove(filepath)
+                print(f"Target path {dl_path} is now empty.")
+            else:
+                print(
+                    f"Proceeding with target directory {dl_path} that already contains data."
+                )
+        else:
+            print(f"The target path {dl_path} for the download is empty.")
+    return None
+
+
 def check_data_version(ds_short_name):
-    """Get latest version number of the dataset."""
+    """Get latest version number of the dataset.
+    Args:
+        ds_short_name (str): The short name of the dataset.
+
+    Returns:
+        int: The latest version number.
+    """
     cmr_collections_url = "https://cmr.earthdata.nasa.gov/search/collections.json"
     response = requests.get(cmr_collections_url, params={"short_name": ds_short_name})
     results = json.loads(response.content)
@@ -35,7 +70,16 @@ def check_data_version(ds_short_name):
 
 
 def start_api_session(ds_short_name, ds_latest_version):
-    """Initate an authenticated NSDIC DAAC API session."""
+    """Initate an authenticated NSDIC DAAC API session.
+
+    Args:
+        ds_short_name (str): The short name of the dataset.
+        ds_latest_version (int): The latest version number of the dataset.
+
+    Returns:
+        requests.sessions.Session: A session with authenticated access to the NSIDC API.
+
+    """
     uid = input("Earthdata Login user name: ")
     pswd = getpass.getpass("Earthdata Login password: ")
 
@@ -58,8 +102,18 @@ def start_api_session(ds_short_name, ds_latest_version):
 
 
 def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
-    """Search for granules within a time range and geographic bounding box. API reference: https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html#query-parameters"""
+    """Search for granules within a time range and geographic bounding box. API reference: https://cmr.earthdata.nasa.gov/search/site/docs/search/api.html#query-parameters
 
+    Args:
+        ds_latest_version (int): The latest version number of the dataset.
+        ds_short_name (str): The short name of the dataset.
+        tstart (str): Start of temporal range (e.g., "2022-01-01T00:00:00Z").
+        tstop (str): End of temporal range (e.g., "2022-12-31T23:59:59Z").
+        bbox (str): The bounding box in the format "min_lon,min_lat,max_lon,max_lat".
+
+    Returns:
+        list: A list of granules matching the specified criteria.
+    """
     granule_search_url = "https://cmr.earthdata.nasa.gov/search/granules"
     search_params = {
         "short_name": ds_short_name,
@@ -80,7 +134,6 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
         if len(results["feed"]["entry"]) == 0:
             # Out of results, so break out of loop
             break
-
         # Collect results and increment page_num
         granules.extend(results["feed"]["entry"])
         search_params["page_num"] += 1
@@ -88,9 +141,7 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
     logging.info(
         f"{len(granules)} granules of {ds_short_name} version {ds_latest_version} cover your area and time of interest."
     )
-
     granule_sizes = [float(granule["granule_size"]) for granule in granules]
-
     logging.info(
         f"The average size of each granule is {mean(granule_sizes):.2f} MB and the total size of all {len(granules)} granules is {sum(granule_sizes):.2f} MB"
     )
@@ -100,18 +151,24 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
 
 
 def set_n_orders_and_mode_and_page_size(granules):
-    """Determine number of orders (endpoints) required based on number of granules requested. Requests will nearly always be async with the maximum page size (2000) but smaller dev chunks may benefit from synchronous requests and smaller page sizes."""
+    """Determine number of orders (endpoints) required based on number of granules requested. Requests will nearly always be async with the maximum page size (2000) but smaller dev chunks may benefit from synchronous requests and smaller page sizes. In testing a "stream" request mode hung, so for now this function is hard coded to return "async" for the request mode.
 
-    def set_request_mode(granules):
-        """Request data asynchronously or synchronously based on number of granules. The API has some built in limits on synchronous requests."""
-        if len(granules) > 100:
-            request_mode = "async"
-        else:
-            request_mode = "stream"
-        return request_mode
+    Args:
+        granules (list): A list of granules.
+
+    Returns:
+        tuple: containing number of orders (int), request_mode "async" or "stream" (str), and the page size for the API request (int).
+    """
 
     def set_page_size(granules):
-        """Set page size (granule chunk size) for an individual API request."""
+        """Set page size (granule chunk size) for an individual API request.
+
+        Args:
+            granules (list): A list of granules.
+
+        Returns:
+            page_size (int): The page size for the API request.
+        """
         if len(granules) > 100:
             page_size = 2000
         else:
@@ -120,14 +177,27 @@ def set_n_orders_and_mode_and_page_size(granules):
 
     page_size = set_page_size(granules)
     page_num = math.ceil(len(granules) / page_size)
-    request_mode = set_request_mode(granules)
+    request_mode = "async"
     return page_num, request_mode, page_size
 
 
 def construct_request(
     ds_latest_version, ds_short_name, tstart, tstop, bbox, req_mode, pg_size
 ):
-    """Construct the API Download Request."""
+    """Construct the API Download Request.
+
+    Args:
+        ds_latest_version (str): The latest version of the dataset.
+        ds_short_name (str): The short name of the dataset.
+        tstart (str): The start of the temporal range.
+        tstop (str): The end of the temporal range.
+        bbox (str): The bounding box for the geographic area of interest.
+        req_mode (str): request mode ("async" or "stream").
+        pg_size (int): The page size for the API request.
+
+    Returns:
+        tuple: containing a list of API endpoints and a dictionary of download parameters.
+    """
     base_url = "https://n5eil02u.ecs.nsidc.org/egi/request"
 
     dl_param_dict = {
@@ -135,7 +205,7 @@ def construct_request(
         "version": ds_latest_version,
         "temporal": f"{tstart},{tstop}",
         "bounding_box": bbox,
-        "format": "GeoTIFF",  # NetCDF4-CF also viable but failed to return data in test
+        "format": "GeoTIFF",  # CP note: NetCDF4-CF available but failed to return data in test
         "projection": "GEOGRAPHIC",
         "page_size": pg_size,
         "request_mode": req_mode,
@@ -156,21 +226,17 @@ def construct_request(
     return endpoint_list, dl_param_dict
 
 
-def wipe_old_downloads():
-    """Wipe prior downloads. Our lives are easier if we assume all data in INPUT_DIR is non-duplicate and is consistent for a procesing run."""
-    try:
-        shutil.rmtree(INPUT_DIR)
-    except:
-        pass
-    # alert user, ask for confirmation
-    #
-    return None
-
-
 def make_async_data_orders(n_orders, session, dl_param_dict):
-    # make the download orders because the API will need to verify the order and do some processing before making it ready for download
-    # we have to pass an authenticated session to the scope of this function
+    """Make the download orders. The API will need to verify the order, prepare it, and perhaps do some processing before making it ready for download. An authenticated session must pass to the scope of this function.
 
+    Args:
+        n_orders (int): orders required based on the granules requested.
+        session (requests.sessions.Session): authenticated API session.
+        dl_param_dict (dict): dictionary of download parameters.
+
+    Returns:
+        download_url (str): URL for downloading the ordered data.
+    """
     base_url = "https://n5eil02u.ecs.nsidc.org/egi/request"
     # Request data service for each page number i.e. order
     for i in range(n_orders):
@@ -181,7 +247,6 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         request = session.get(base_url, params=dl_param_dict)
         logging.info(f"Request HTTP response: {request.status_code}")
 
-        # raise bad request: Loop will stop for bad response code.
         request.raise_for_status()
         logging.info(f"Order request URL: {request.url}")
         esir_root = ET.fromstring(request.content)
@@ -197,14 +262,11 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         # Create status URL
         statusURL = base_url + "/" + orderID
         logging.info(f"status URL: {statusURL}")
-
         # Find order status
         request_response = session.get(statusURL)
         logging.info(
             f"Status code from order response URL is {request_response.status_code}"
         )
-
-        # Raise bad request: Loop will stop for bad response code.
         request_response.raise_for_status()
         request_root = ET.fromstring(request_response.content)
         statuslist = []
@@ -217,10 +279,8 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         # Continue loop while request is still processing
         while status == "pending" or status == "processing":
             logging.info("Status is not complete. Trying again.")
-            time.sleep(30)  # emit status twice per minute
+            time.sleep(60)  # emit status once per minute
             loop_response = session.get(statusURL)
-
-            # Raise bad request: Loop will stop for bad response code.
             loop_response.raise_for_status()
             loop_root = ET.fromstring(loop_response.content)
 
@@ -229,7 +289,7 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
             for status in loop_root.findall("./requestStatus/"):
                 statuslist.append(status.text)
             status = statuslist[0]
-            print(status)
+            print(f"data order is {status}")
             logging.info(f"Retry request status is {status}")
             if status == "pending" or status == "processing":
                 continue
@@ -248,36 +308,20 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
             logging.error("Request failed.")
 
 
-def make_streaming_data_order(page_num, session, dl_param_dict, dl_path):
-    base_url = "https://n5eil02u.ecs.nsidc.org/egi/request"
-
-    for i in range(page_num):
-        page_val = i + 1
-        print("Streaming Data Order: ", page_val)
-        request = session.get(base_url, params=dl_param_dict)
-        print("HTTP response from order URL: ", request.status_code)
-        request.raise_for_status()
-        d = request.headers["content-disposition"]
-        fname = re.findall("filename=(.+)", d)
-        dirname = os.path.join(dl_path, fname[0].strip('"'))
-        print("Downloading...")
-        open(dirname, "wb").write(request.content)
-        print("Data request", page_val, "is complete.")
-
-    # Unzip outputs
-    for z in os.listdir(path):
-        if z.endswith(".zip"):
-            zip_name = path + "/" + z
-            zip_ref = zipfile.ZipFile(zip_name)
-            zip_ref.extractall(path)
-            zip_ref.close()
-            os.remove(zip_name)
-
-
 def download_order(session, download_url, dl_path):
+    """Download and extract the ordered data.
+
+    Args:
+        session (requests.sessions.Session): authenticated session for making requests.
+        download_url (str): URL for downloading the ordered data.
+        dl_path (pathlib.Path): target directory for downloading and extracting data
+
+    Returns:
+        None
+    """
+
     logging.info("Beginning download of zipped output...")
     zip_response = session.get(download_url)
-    # Raise bad request: Loop will stop for bad response code.
     zip_response.raise_for_status()
     with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
         z.extractall(dl_path)
@@ -285,7 +329,14 @@ def download_order(session, download_url, dl_path):
 
 
 def flatten_download_directory(dl_path):
-    """Clean up downloads by removing individual granule folders."""
+    """Clean up downloads by removing individual granule folders and by moving files from nested directories to the root download directory.
+
+    Args:
+        dl_path (pathlib.Path): The directory path of the download.
+
+    Returns:
+        None
+    """
     logging.info("Flattening data from nested directories...")
     for root, dirs, files in os.walk(dl_path, topdown=False):
         for file in files:
@@ -295,12 +346,33 @@ def flatten_download_directory(dl_path):
                 pass
         for name in dirs:
             os.rmdir(os.path.join(root, name))
-
     logging.info(f"{dl_path} now a flat directory.")
+
+
+def validate_download(dl_path, number_granules_requested):
+    """Validate the download process by warning if file count does not match the number of granules requested. Assuming all variables are requested and a GeoTIFF format, the number of downloaded files should be 5X the granule count (i.e., 5 GeoTIFFs, one per variable, per granule).
+
+    Args:
+        dl_path (pathlib.Path): The directory path of the download.
+
+    Returns:
+        None
+    """
+    n_variables = 5  # CP note: consider parsing this as a var from the request
+    dl_file_count = sum(1 for x in dl_path.glob("*") if x.is_file())
+    dl_files_expected = number_granules_requested * n_variables
+    logging.info(f"{dl_file_count} files were downloaded.")
+    if dl_file_count != dl_files_expected:
+        logging.warn(
+            f"{dl_file_count} files were downloaded, but based on {number_granules_requested} granules a downloaded file count of {dl_files_expected} is expected."
+        )
+    else:
+        logging.info("Downloaded file count matches expectations.")
 
 
 if __name__ == "__main__":
     logging.basicConfig(filename="download.log", level=logging.INFO)
+    wipe_old_downloads(INPUT_DIR)
 
     v = check_data_version(short_name)
     api_session = start_api_session(short_name, v)
@@ -324,13 +396,13 @@ if __name__ == "__main__":
         request_mode,
         page_size,
     )
-    if request_mode == "async":
-        dl_url = make_async_data_orders(page_num, api_session, dl_params)
-        print(dl_url)
-    else:
-        print("streaming mode")
-        dl_url = make_streaming_data_order(page_num, api_session, dl_params)
 
+    dl_url = make_async_data_orders(page_num, api_session, dl_params)
+    print(f"URL for download: {dl_url}")
     download_order(api_session, dl_url, INPUT_DIR)
+
     flatten_download_directory(INPUT_DIR)
+    api_session.close()
+
+    validate_download(INPUT_DIR, len(granule_list))
     print("Download Script Complete.")
