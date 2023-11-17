@@ -363,7 +363,7 @@ def validate_download(dl_path, number_granules_requested):
     dl_files_expected = number_granules_requested * n_variables
     logging.info(f"{dl_file_count} files were downloaded.")
     if dl_file_count != dl_files_expected:
-        logging.warn(
+        logging.warning(
             f"{dl_file_count} files were downloaded, but based on {number_granules_requested} granules a downloaded file count of {dl_files_expected} is expected."
         )
     else:
