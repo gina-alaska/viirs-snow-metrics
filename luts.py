@@ -6,12 +6,12 @@ parameter_sets = {
     "dev_params": {
         "bbox": "-146,65,-145,66",
         "start_date": "2013-01-01T00:00:00Z",
-        "end_date": "2013-01-03T23:00:00Z",
+        "end_date": "2013-01-03T23:59:59Z",
     },
     "prod_params": {
         "bbox": "172,51,-130,72",
-        "start_date": "2012-01-01",
-        "end_date": "2022-12-31",
+        "start_date": "2012-01-01T00:00:00Z",
+        "end_date": "2022-12-31T23:59:59Z",
     },
 }
 
