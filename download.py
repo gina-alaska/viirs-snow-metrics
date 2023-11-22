@@ -145,8 +145,8 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
     logging.info(
         f"The average size of each granule is {mean(granule_sizes):.2f} MB and the total size of all {len(granules)} granules is {sum(granule_sizes):.2f} MB"
     )
-    # CP note: `results` has low-level meta for all granules, retaining for debugging
-    # logging.info(results)
+    # CP note: low-level meta for all granules, retaining for debugging
+    logging.info(results)
     return granules
 
 
@@ -176,13 +176,14 @@ def set_n_orders_and_mode_and_page_size(granules):
         return page_size
 
     page_size = set_page_size(granules)
-    page_num = math.ceil(len(granules) / page_size)
+    n_pages = math.ceil(len(granules) / page_size)
     request_mode = "async"
-    return page_num, request_mode, page_size
+    logging.info(f"Number of orders is {n_pages} with size {page_size}.")
+    return n_pages, request_mode, page_size
 
 
 def construct_request(
-    ds_latest_version, ds_short_name, tstart, tstop, bbox, req_mode, pg_size
+    ds_latest_version, ds_short_name, tstart, tstop, bbox, req_mode, pg_size, n_pages
 ):
     """Construct the API Download Request.
 
@@ -194,6 +195,7 @@ def construct_request(
         bbox (str): The bounding box for the geographic area of interest.
         req_mode (str): request mode ("async" or "stream").
         pg_size (int): The page size for the API request.
+        n_pages (int): Number of pages for API request (i.e., number of orders)
 
     Returns:
         tuple: containing a list of API endpoints and a dictionary of download parameters.
@@ -217,7 +219,7 @@ def construct_request(
 
     # Construct request URL(s)
     endpoint_list = []
-    for i in range(page_num):
+    for i in range(n_pages):
         page_val = i + 1
         api_request = f"{base_url}?{dl_string}&page_num={page_val}"
         endpoint_list.append(api_request)
@@ -230,15 +232,18 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
     """Make the download orders. The API will need to verify the order, prepare it, and perhaps do some processing before making it ready for download. An authenticated session must pass to the scope of this function.
 
     Args:
-        n_orders (int): orders required based on the granules requested.
+        n_orders (int): orders (pages) required based on the granules requested.
         session (requests.sessions.Session): authenticated API session.
         dl_param_dict (dict): dictionary of download parameters.
 
     Returns:
-        download_url (str): URL for downloading the ordered data.
+        download_urls (list): URLs for downloading the ordered data.
     """
     base_url = "https://n5eil02u.ecs.nsidc.org/egi/request"
     # Request data service for each page number i.e. order
+    download_urls = []
+    logging.info(f"There are {n_orders} orders (number of pages).")
+
     for i in range(n_orders):
         page_val = i + 1
         logging.info(f"Async Data Order: {page_val}")
@@ -301,30 +306,33 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
                 logging.error(message)
 
         if status == "complete":
-            download_url = "https://n5eil02u.ecs.nsidc.org/esir/" + orderID + ".zip"
-            logging.info(f"Zip download URL for order {orderID}: {download_url}")
-            return download_url
+            dl_url = "https://n5eil02u.ecs.nsidc.org/esir/" + orderID + ".zip"
+            logging.info(f"Zip download URL for order {orderID}: {dl_url}")
+            download_urls.append(dl_url)  # return list of these outside for loop!!
+            ## then the next function will accept the list and iterate through those.
         else:
             logging.error("Request failed.")
+    return download_urls
 
 
-def download_order(session, download_url, dl_path):
+def download_order(session, download_urls, dl_path):
     """Download and extract the ordered data.
 
     Args:
         session (requests.sessions.Session): authenticated session for making requests.
-        download_url (str): URL for downloading the ordered data.
+        download_urls (list): URL(s) for downloading the ordered data.
         dl_path (pathlib.Path): target directory for downloading and extracting data
 
     Returns:
         None
     """
 
-    logging.info("Beginning download of zipped output...")
-    zip_response = session.get(download_url)
-    zip_response.raise_for_status()
-    with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
-        z.extractall(dl_path)
+    for dl_url in download_urls:
+        logging.info("Beginning download of zipped output...")
+        zip_response = session.get(dl_url)
+        zip_response.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
+            z.extractall(dl_path)
     logging.info("Data request is complete.")
 
 
@@ -359,7 +367,7 @@ def validate_download(dl_path, number_granules_requested):
         None
     """
     n_variables = 5  # CP note: consider parsing this as a var from the request
-    dl_file_count = sum(1 for x in dl_path.glob("*") if x.is_file())
+    dl_file_count = sum(1 for x in dl_path.rglob("*") if x.is_file())
     dl_files_expected = number_granules_requested * n_variables
     logging.info(f"{dl_file_count} files were downloaded.")
     if dl_file_count != dl_files_expected:
@@ -395,11 +403,11 @@ if __name__ == "__main__":
         viirs_params["bbox"],
         request_mode,
         page_size,
+        page_num,
     )
 
-    dl_url = make_async_data_orders(page_num, api_session, dl_params)
-    print(f"URL for download: {dl_url}")
-    download_order(api_session, dl_url, INPUT_DIR)
+    dl_urls = make_async_data_orders(page_num, api_session, dl_params)
+    download_order(api_session, dl_urls, INPUT_DIR)
 
     flatten_download_directory(INPUT_DIR)
     api_session.close()
