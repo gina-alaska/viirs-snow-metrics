@@ -29,6 +29,11 @@ Set to a path where you will write the snow metric outputs to disk. Consider usi
 export OUTPUT_DIR=/some_shared_disk/VIIRS_snow_metrics
 ``` 
 ### Runtime Options
+##### `SNOW_YEAR`
+Set the "snow year" to download and process. Snow year 2015 begins August 1, 2015 and ends on July 31, 2016. Leap days are included.
+```sh
+export SNOW_YEAR=2015
+``` 
 ##### `DEV_MODE` (optional)
 Set to True (note this will be passed as a `string` type rather than `bool`) to work on a smaller chunk of data both spatially and temporally for the purpose of improving development speed. Default is True. Setting to False will trigger a production run.
 ```sh

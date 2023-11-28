@@ -19,9 +19,12 @@ preprocessed_dir.mkdir(exist_ok=True)
 # path to a directory for all output files
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR"))
 OUTPUT_DIR.mkdir(exist_ok=True)
-# # subdirectory for metrics files
+# subdirectory for metrics files
 metrics_dir = Path(os.getenv("OUTPUT_DIR")).joinpath("viirs_snow_metrics")
 metrics_dir.mkdir(exist_ok=True)
+
+# Set a "snow_year" (August 1 through July 31)
+SNOW_YEAR = os.getenv("SNOW_YEAR")
 
 # Configure development vs. production runtimes, default to dev
 if os.getenv("DEV_MODE") is None:
@@ -39,3 +42,4 @@ else:
     viirs_params = parameter_sets["dev_params"]
     print("Operating in development mode with the following parameters:")
     print(viirs_params)
+
