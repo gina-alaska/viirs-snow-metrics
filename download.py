@@ -1,4 +1,4 @@
-"""Download VIIRS Data from the NSIDC DAAC. See https://github.com/nsidc/NSIDC-Data-Access-Notebook for reference - this module uses large amounts of code from notebook examples within that repo."""
+"""Download VIIRS Data from the NSIDC DAAC. See https://github.com/nsidc/NSIDC-Data-Access-Notebook for reference. This module uses large amounts of code from notebook examples within that repo."""
 
 import requests
 import getpass
@@ -12,11 +12,13 @@ import re
 import sys
 import time
 import logging
+import calendar
 from statistics import mean
 from xml.etree import ElementTree as ET
+from datetime import datetime, timedelta
 
 from luts import short_name
-from config import viirs_params, INPUT_DIR
+from config import viirs_params, INPUT_DIR, SNOW_YEAR
 
 
 def wipe_old_downloads(dl_path):
@@ -69,6 +71,48 @@ def check_data_version(ds_short_name):
     return latest_version
 
 
+def determine_tiles_for_bbox(bounding_box):
+    """
+    The granule search API isn't totally reliable: in testing superfluous tiles were being downloaded, so we need to ping the tile search API endpoint and use the results to trim down the list of granules.
+    """
+    tile_search_url = f"https://cmr.earthdata.nasa.gov/search/tiles?bounding_box={bounding_box}"
+    tile_list = requests.get(tile_search_url).json()
+
+    tile_strs = []
+    for tile in tile_list:
+        if tile[0] < 10:
+            hstr = f"h0{tile[0]}"
+        else:
+            hstr = f"h{tile[0]}"
+        if tile[1] < 10:
+            vstr = f"v0{tile[1]}"
+        else:
+            vstr = f"v{tile[1]}"
+        tile_str = hstr + vstr
+        tile_strs.append(tile_str)
+    reference_tiles = set(tile_strs)
+    logging.info(f"The following tiles are needed to cover your area of interest: {reference_tiles}")
+    return reference_tiles
+
+
+def generate_monthly_dl_chunks(snow_year):
+    intervals = []
+
+    for month in range(1, 13):
+        year = snow_year if month >= 8 else snow_year + 1
+        start_date = datetime(year, month, 1)
+        _, last_day = calendar.monthrange(year, month)
+        end_date = datetime(year, month, last_day, 23, 59, 59)
+
+        interval = (
+            start_date.strftime('%Y-%m-%dT00:00:00Z'),
+            end_date.strftime('%Y-%m-%dT23:59:59Z')
+        )
+
+        intervals.append(interval)
+    return intervals
+
+
 def start_api_session(ds_short_name, ds_latest_version):
     """Initate an authenticated NSDIC DAAC API session.
 
@@ -109,7 +153,7 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
         ds_short_name (str): The short name of the dataset.
         tstart (str): Start of temporal range (e.g., "2022-01-01T00:00:00Z").
         tstop (str): End of temporal range (e.g., "2022-12-31T23:59:59Z").
-        bbox (str): The bounding box in the format "min_lon,min_lat,max_lon,max_lat".
+        bbox (str): Bounding box in the format "min_lon,min_lat,max_lon,max_lat".
 
     Returns:
         list: A list of granules matching the specified criteria.
@@ -136,7 +180,7 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
             break
         # Collect results and increment page_num
         granules.extend(results["feed"]["entry"])
-        search_params["page_num"] += 1
+        search_params["page_num"] += 1 
 
     logging.info(
         f"{len(granules)} granules of {ds_short_name} version {ds_latest_version} cover your area and time of interest."
@@ -148,6 +192,19 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
     # CP note: low-level meta for all granules, retaining for debugging
     logging.info(results)
     return granules
+
+
+def filter_granules_based_on_tiles(granules, ref):
+    """Filter granules based on a list of MODIS (i.e., VIIRS) sinusoidal grid tiles.
+    """
+    filtered = [x for x in granules if x["producer_granule_id"].split(".")[2] in ref]
+    logging.info(f"After filtering {len(filtered)} granules remain.")
+
+    granule_sizes = [float(granule["granule_size"]) for granule in filtered]
+    logging.info(
+        f"The average size of each filtered granule is {mean(granule_sizes):.2f} MB and the total size of all filtered {len(filtered)} granules is {sum(granule_sizes):.2f} MB"
+    )
+    return filtered
 
 
 def set_n_orders_and_mode_and_page_size(granules):
@@ -207,7 +264,8 @@ def construct_request(
         "version": ds_latest_version,
         "temporal": f"{tstart},{tstop}",
         "bounding_box": bbox,
-        "format": "GeoTIFF",  # CP note: NetCDF4-CF available but failed to return data in test
+        "bbox": bbox,
+        "format": "GeoTIFF", # CP note: NetCDF4-CF option failed to return data in test
         "projection": "GEOGRAPHIC",
         "page_size": pg_size,
         "request_mode": req_mode,
@@ -284,7 +342,7 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         # Continue loop while request is still processing
         while status == "pending" or status == "processing":
             logging.info("Status is not complete. Trying again.")
-            time.sleep(60)  # emit status once per minute
+            time.sleep(300)  # emit status every 5 min
             loop_response = session.get(statusURL)
             loop_response.raise_for_status()
             loop_root = ET.fromstring(loop_response.content)
@@ -380,37 +438,45 @@ def validate_download(dl_path, number_granules_requested):
 
 if __name__ == "__main__":
     logging.basicConfig(filename="download.log", level=logging.INFO)
+    
     wipe_old_downloads(INPUT_DIR)
 
     v = check_data_version(short_name)
+    ref_tiles = determine_tiles_for_bbox(viirs_params["bbox"])
+    snow_year_chunks = generate_monthly_dl_chunks(int(SNOW_YEAR))
+
     api_session = start_api_session(short_name, v)
 
-    granule_list = search_granules(
-        v,
-        short_name,
-        viirs_params["start_date"],
-        viirs_params["end_date"],
-        viirs_params["bbox"],
-    )
-    page_num, request_mode, page_size = set_n_orders_and_mode_and_page_size(
-        granule_list
-    )
-    api_request, dl_params = construct_request(
-        v,
-        short_name,
-        viirs_params["start_date"],
-        viirs_params["end_date"],
-        viirs_params["bbox"],
-        request_mode,
-        page_size,
-        page_num,
-    )
+    for time_chunk in snow_year_chunks:
+        logging.info(f"Starting download for {time_chunk}.")
+        granule_list = search_granules(
+            v,
+            short_name,
+            time_chunk[0],
+            time_chunk[1],
+            viirs_params["bbox"],
+        )
+        filtered_granules = filter_granules_based_on_tiles(granule_list, ref_tiles)
 
-    dl_urls = make_async_data_orders(page_num, api_session, dl_params)
-    download_order(api_session, dl_urls, INPUT_DIR)
+        page_num, request_mode, page_size = set_n_orders_and_mode_and_page_size(
+            granule_list
+        )
+        api_request, dl_params = construct_request(
+            v,
+            short_name,
+            time_chunk[0],
+            time_chunk[1],
+            viirs_params["bbox"],
+            request_mode,
+            page_size,
+            page_num,
+        )
 
-    flatten_download_directory(INPUT_DIR)
+        dl_urls = make_async_data_orders(page_num, api_session, dl_params)
+        download_order(api_session, dl_urls, INPUT_DIR)
+
+        flatten_download_directory(INPUT_DIR)
+        validate_download(INPUT_DIR, len(granule_list))
+    
     api_session.close()
-
-    validate_download(INPUT_DIR, len(granule_list))
     print("Download Script Complete.")
