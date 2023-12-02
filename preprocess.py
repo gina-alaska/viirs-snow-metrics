@@ -1,3 +1,5 @@
+import argparse
+import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -9,6 +11,11 @@ import pandas as pd
 
 from config import INPUT_DIR, SCRATCH_DIR
 from luts import data_variables
+
+def list_input_files(src_dir):
+    fps = [x for x in src_dir.glob("*.tif")]
+    logging.info(f"$INPUT_DIR file is {len(fps)}.")
+    return fps
 
 
 def parse_tile(fp):
@@ -77,7 +84,7 @@ def make_raster_stack(files):
 
 
 def create_single_tile_dataset(tile_di, tile):
-    # Assuming all files have the same metadata, use the first one to get metadata
+    # assuming all files have same metadata, use first one to get metadata
     reference_geotiff = tile_di[tile]["CGF_NDSI_Snow_Cover"][0]
     transform = initialize_transform(reference_geotiff)
     lon, lat = initialize_latlon(reference_geotiff)
@@ -90,7 +97,6 @@ def create_single_tile_dataset(tile_di, tile):
     ]
 
     ds_dict = dict()
-
     ds_coords = {
         "time": pd.DatetimeIndex(dates),
         "x": lon[0, :],
@@ -103,14 +109,26 @@ def create_single_tile_dataset(tile_di, tile):
         ds_dict.update(data_var_dict)
 
     ds = xr.Dataset(ds_dict, coords=ds_coords)
-
     # Set the coordinate reference system
     ds.rio.write_crs(crs, inplace=True)
-
     # Set the spatial coordinates
     ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
-
     # Set the spatial attributes
     ds.rio.write_transform(transform, inplace=True)
 
     return ds.sortby("time")
+
+if __name__ == "__main__":
+    logging.basicConfig(filename="preprocess.log", level=logging.INFO)
+    
+    parser = argparse.ArgumentParser(description="Preprocessing Script")
+    parser.add_argument("tile_id", type=str, help="MODIS/VIIRS Tile ID (ex. h11v02)")
+    args = parser.parse_args()
+    tile_id = args.tile_id
+    
+    geotiffs = list_input_files(INPUT_DIR)
+    geotiff_di = construct_file_dict(geotiffs)
+    
+    create_single_tile_dataset(geotiff_di, tile_id)
+    
+    print("Preprocessing Script Complete.")
