@@ -9,7 +9,7 @@ import rioxarray
 import numpy as np
 import pandas as pd
 
-from config import INPUT_DIR, SCRATCH_DIR
+from config import INPUT_DIR, SCRATCH_DIR, SNOW_YEAR
 from luts import data_variables
 
 def list_input_files(src_dir):
@@ -109,14 +109,17 @@ def create_single_tile_dataset(tile_di, tile):
         ds_dict.update(data_var_dict)
 
     ds = xr.Dataset(ds_dict, coords=ds_coords)
-    # Set the coordinate reference system
     ds.rio.write_crs(crs, inplace=True)
-    # Set the spatial coordinates
     ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
-    # Set the spatial attributes
     ds.rio.write_transform(transform, inplace=True)
 
     return ds.sortby("time")
+
+
+def write_tile_dataset(ds, tile):
+    filename = Path(SCRATCH_DIR/f"snow_year_{SNOW_YEAR}_{tile}.nc")
+    ds.to_netcdf(filename)
+
 
 if __name__ == "__main__":
     logging.basicConfig(filename="preprocess.log", level=logging.INFO)
@@ -129,6 +132,6 @@ if __name__ == "__main__":
     geotiffs = list_input_files(INPUT_DIR)
     geotiff_di = construct_file_dict(geotiffs)
     
-    create_single_tile_dataset(geotiff_di, tile_id)
-    
+    tile_ds = create_single_tile_dataset(geotiff_di, tile_id)
+    write_tile_dataset(tile_ds, tile_id)
     print("Preprocessing Script Complete.")
