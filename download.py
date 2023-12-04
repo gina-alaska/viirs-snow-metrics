@@ -75,7 +75,9 @@ def determine_tiles_for_bbox(bounding_box):
     """
     The granule search API isn't totally reliable: in testing superfluous tiles were being downloaded, so we need to ping the tile search API endpoint and use the results to trim down the list of granules.
     """
-    tile_search_url = f"https://cmr.earthdata.nasa.gov/search/tiles?bounding_box={bounding_box}"
+    tile_search_url = (
+        f"https://cmr.earthdata.nasa.gov/search/tiles?bounding_box={bounding_box}"
+    )
     tile_list = requests.get(tile_search_url).json()
 
     tile_strs = []
@@ -91,7 +93,9 @@ def determine_tiles_for_bbox(bounding_box):
         tile_str = hstr + vstr
         tile_strs.append(tile_str)
     reference_tiles = set(tile_strs)
-    logging.info(f"The following tiles are needed to cover your area of interest: {reference_tiles}")
+    logging.info(
+        f"The following tiles are needed to cover your area of interest: {reference_tiles}"
+    )
     return reference_tiles
 
 
@@ -105,8 +109,8 @@ def generate_monthly_dl_chunks(snow_year):
         end_date = datetime(year, month, last_day, 23, 59, 59)
 
         interval = (
-            start_date.strftime('%Y-%m-%dT00:00:00Z'),
-            end_date.strftime('%Y-%m-%dT23:59:59Z')
+            start_date.strftime("%Y-%m-%dT00:00:00Z"),
+            end_date.strftime("%Y-%m-%dT23:59:59Z"),
         )
 
         intervals.append(interval)
@@ -180,7 +184,7 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
             break
         # Collect results and increment page_num
         granules.extend(results["feed"]["entry"])
-        search_params["page_num"] += 1 
+        search_params["page_num"] += 1
 
     logging.info(
         f"{len(granules)} granules of {ds_short_name} version {ds_latest_version} cover your area and time of interest."
@@ -195,8 +199,7 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
 
 
 def filter_granules_based_on_tiles(granules, ref):
-    """Filter granules based on a list of MODIS (i.e., VIIRS) sinusoidal grid tiles.
-    """
+    """Filter granules based on a list of MODIS (i.e., VIIRS) sinusoidal grid tiles."""
     filtered = [x for x in granules if x["producer_granule_id"].split(".")[2] in ref]
     logging.info(f"After filtering {len(filtered)} granules remain.")
 
@@ -265,7 +268,7 @@ def construct_request(
         "temporal": f"{tstart},{tstop}",
         "bounding_box": bbox,
         "bbox": bbox,
-        "format": "GeoTIFF", # CP note: NetCDF4-CF option failed to return data in test
+        "format": "GeoTIFF",  # CP note: NetCDF4-CF option failed to return data in test
         "projection": "GEOGRAPHIC",
         "page_size": pg_size,
         "request_mode": req_mode,
@@ -438,7 +441,7 @@ def validate_download(dl_path, number_granules_requested):
 
 if __name__ == "__main__":
     logging.basicConfig(filename="download.log", level=logging.INFO)
-    
+
     wipe_old_downloads(INPUT_DIR)
 
     v = check_data_version(short_name)
@@ -477,6 +480,6 @@ if __name__ == "__main__":
 
         flatten_download_directory(INPUT_DIR)
         validate_download(INPUT_DIR, len(granule_list))
-    
+
     api_session.close()
     print("Download Script Complete.")

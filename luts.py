@@ -11,7 +11,13 @@ parameter_sets = {
     },
 }
 
-data_variables = ['Algorithm_Bit_Flags_QA', 'Basic_QA', 'CGF_NDSI_Snow_Cover', 'Cloud_Persistence', 'Daily_NDSI_Snow_Cover']
+data_variables = [
+    "Algorithm_Bit_Flags_QA",
+    "Basic_QA",
+    "CGF_NDSI_Snow_Cover",
+    "Cloud_Persistence",
+    "Daily_NDSI_Snow_Cover",
+]
 
 # CP note: some of these could be remapped to a single int for NoData
 cgf_snow_cover_codes = {

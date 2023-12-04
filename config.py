@@ -42,4 +42,3 @@ else:
     viirs_params = parameter_sets["dev_params"]
     print("Operating in development mode with the following parameters:")
     print(viirs_params)
-
