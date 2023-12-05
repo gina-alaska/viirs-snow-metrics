@@ -1,3 +1,5 @@
+"""Preprocess the downloaded VIIRS geotiffs to a netCDF dataset that represents all data for a single snow year."""
+
 import argparse
 import logging
 from datetime import datetime, timedelta
@@ -12,17 +14,42 @@ import pandas as pd
 from config import INPUT_DIR, SCRATCH_DIR, SNOW_YEAR
 from luts import data_variables
 
+
 def list_input_files(src_dir):
+    """List all .tif files in the source directory.
+
+    Args:
+       src_dir (Path): The source directory containing the .tif files.
+
+    Returns:
+       list: A list of all .tif files in the source directory.
+    """
     fps = [x for x in src_dir.glob("*.tif")]
-    logging.info(f"$INPUT_DIR file is {len(fps)}.")
+    logging.info(f"$INPUT_DIR file count is {len(fps)}.")
+    logging.info(f"Files that will be included in dataset: {fps}.")
     return fps
 
 
 def parse_tile(fp):
+    """Parse the tile from the filename.
+
+    Args:
+       fp (Path): The file path object.
+
+    Returns:
+       str: The tile extracted from the filename.
+    """
     return fp.name.split("_")[2]
 
 
 def parse_date(fp):
+    """Parse the date from the filename.
+    Args:
+       fp (Path): The file path object.
+
+    Returns:
+       str: The date (DOY format) extracted from the filename.
+    """
     return fp.name.split("_")[1][1:]
 
 
@@ -103,13 +130,18 @@ def create_single_tile_dataset(tile_di, tile):
         "y": lat[:, 0],
     }
 
-    for data_var in [data_variables[2]]:  # only snow for testing
+    # CP note: use CGF snow [data_variables[2]] for testing
+    for data_var in data_variables:
+        logging.info(f"Stacking data for {data_var}...")
         raster_stack = make_raster_stack(tile_di[tile][data_var])
         data_var_dict = {data_var: (["time", "y", "x"], np.array(raster_stack))}
         ds_dict.update(data_var_dict)
 
+    logging.info(f"Creating dataset...")
     ds = xr.Dataset(ds_dict, coords=ds_coords)
+    logging.info(f"Assigning {crs} as dataset CRS...")
     ds.rio.write_crs(crs, inplace=True)
+    logging.info(f"Assigning {tranform} as dataset transform...")
     ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
     ds.rio.write_transform(transform, inplace=True)
 
@@ -117,21 +149,23 @@ def create_single_tile_dataset(tile_di, tile):
 
 
 def write_tile_dataset(ds, tile):
-    filename = Path(SCRATCH_DIR/f"snow_year_{SNOW_YEAR}_{tile}.nc")
+    filename = Path(SCRATCH_DIR / f"snow_year_{SNOW_YEAR}_{tile}.nc")
     ds.to_netcdf(filename)
+    logging.info(f"NetCDF dataset for tile {tile} wriiten to {filename}.")
 
 
 if __name__ == "__main__":
     logging.basicConfig(filename="preprocess.log", level=logging.INFO)
-    
+
     parser = argparse.ArgumentParser(description="Preprocessing Script")
     parser.add_argument("tile_id", type=str, help="MODIS/VIIRS Tile ID (ex. h11v02)")
     args = parser.parse_args()
     tile_id = args.tile_id
-    
+
+    logging.info(f"Creating dataset for tile {tile_id}.")
     geotiffs = list_input_files(INPUT_DIR)
     geotiff_di = construct_file_dict(geotiffs)
-    
+
     tile_ds = create_single_tile_dataset(geotiff_di, tile_id)
     write_tile_dataset(tile_ds, tile_id)
     print("Preprocessing Script Complete.")
