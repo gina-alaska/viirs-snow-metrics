@@ -35,16 +35,19 @@ Set the "snow year" to download and process. Snow year 2015 begins August 1, 201
 export SNOW_YEAR=2015
 ``` 
 ##### `DEV_MODE` (optional)
-Set to True (note this will be passed as a `string` type rather than `bool`) to work on a smaller chunk of data both spatially and temporally for the purpose of improving development speed. Default is True. Setting to False will trigger a production run.
+Set to True (note this will be passed as a `string` type rather than `bool`) to work on a smaller spatial subset for the purpose of improving development speed. Default is True. Setting to False will trigger a production run over the entire Alaska domain.
 ```sh
 export DEV_MODE=True
 ```
 
 ## Usage
 ### `download.py`
-Run this script with no arguments to download the source dataset from the NSIDC DAAC. Users will be prompted to enter valid Earthdata credentials. Users must have an Earthdata account to download the necessary data. Data will be downloaded to the `$INPUT_DIR` directory. The script will ask to wipe the contents of `$INPUT_DIR` before proceeding with the download. Total download time will of course depend on your connection speed, but it will also depend on how busy the upstream data service is and how complicated your data orders[] are. For example, if you are asking the service to perform [reformatting (e.g., h5 to GeoTIFF)](https://nsidc.org/data/user-resources/help-center/table-key-value-pair-kvp-operands-subsetting-reformatting-and-reprojection-services) the service will take longer to prepare the order. Consider executing `download.py` in a screen session or similar. It may take a full day to prepare the order for a download of the full time series, and the order preparation may take longer than the download itself. A log file (`download.log`) will be written to the same directory as the download script that captures the API endpoints used as well as information about the requested granules.
+Run this script with no arguments to download the source dataset from the NSIDC DAAC. Users will be prompted to enter valid Earthdata credentials. Users must have an Earthdata account to download the necessary data. Data will be downloaded to the `$INPUT_DIR` directory. The script will ask to wipe the contents of `$INPUT_DIR` before proceeding with the download. Total download time will of course depend on your connection speed, but it will also depend on how busy the upstream data service is and how complicated your data orders are. For example, if you are asking the service to perform [reformatting (e.g., h5 to GeoTIFF)](https://nsidc.org/data/user-resources/help-center/table-key-value-pair-kvp-operands-subsetting-reformatting-and-reprojection-services) the service will take longer to prepare the order. Consider executing `download.py` in a screen session or similar. It may take a full day to prepare the order for a download of the full time series, and the order preparation may take longer than the download itself. A log file (`download.log`) will be written to the same directory as the download script that captures the API endpoints used as well as information about the requested granules.
 #### Example Usage
 `python download.py`
 
-
+### `preprocess.py`
+Run this script with a `tile_id` argument to preprocess the downloaded data. The script will analyze the data from `$INPUT_DIR` and construct a hash table with keys based on the tile of the source dataset and the data variable (one of `"Algorithm_Bit_Flags_QA", "Basic_QA" "CGF_NDSI_Snow_Cover", "Cloud_Persistence", "Daily_NDSI_Snow_Cover"`) represented by the GeoTIFF. The script will construct a time-indexed netCDF file containing the entire set of data for the `SNOW_YEAR` being processed and write the file to `$SCRATCH_DIR/preprocessed`.
+#### Example Usage
+`python preprocess.py h11v02`
 
