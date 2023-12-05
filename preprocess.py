@@ -11,7 +11,7 @@ import rioxarray
 import numpy as np
 import pandas as pd
 
-from config import INPUT_DIR, SCRATCH_DIR, SNOW_YEAR
+from config import INPUT_DIR, SNOW_YEAR, preprocessed_dir
 from luts import data_variables
 
 
@@ -149,7 +149,7 @@ def create_single_tile_dataset(tile_di, tile):
 
 
 def write_tile_dataset(ds, tile):
-    filename = Path(SCRATCH_DIR / f"snow_year_{SNOW_YEAR}_{tile}.nc")
+    filename = Path(preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}.nc")
     ds.to_netcdf(filename)
     logging.info(f"NetCDF dataset for tile {tile} wriiten to {filename}.")
 
