@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import pickle
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -78,6 +79,9 @@ def construct_file_dict(fps):
         if data_var not in di[tile]:
             di[tile][data_var] = []
         di[tile][data_var].append(fp)
+    # persist file dict as pickle for later reference
+    with open("file_dict.pickle", "wb") as handle:
+        pickle.dump(di, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return di
 
 
@@ -141,7 +145,7 @@ def create_single_tile_dataset(tile_di, tile):
     ds = xr.Dataset(ds_dict, coords=ds_coords)
     logging.info(f"Assigning {crs} as dataset CRS...")
     ds.rio.write_crs(crs, inplace=True)
-    logging.info(f"Assigning {tranform} as dataset transform...")
+    logging.info(f"Assigning {transform} as dataset transform...")
     ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
     ds.rio.write_transform(transform, inplace=True)
 
