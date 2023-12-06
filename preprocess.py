@@ -11,6 +11,8 @@ import rasterio as rio
 import rioxarray
 import numpy as np
 import pandas as pd
+import dask
+import dask.array as da
 
 from config import INPUT_DIR, SNOW_YEAR, preprocessed_dir
 from luts import data_variables
@@ -138,7 +140,7 @@ def create_single_tile_dataset(tile_di, tile):
     for data_var in data_variables:
         logging.info(f"Stacking data for {data_var}...")
         raster_stack = make_raster_stack(tile_di[tile][data_var])
-        data_var_dict = {data_var: (["time", "y", "x"], np.array(raster_stack))}
+        data_var_dict = {data_var: (["time", "y", "x"], da.array(raster_stack))}
         ds_dict.update(data_var_dict)
 
     logging.info(f"Creating dataset...")
@@ -149,7 +151,10 @@ def create_single_tile_dataset(tile_di, tile):
     ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
     ds.rio.write_transform(transform, inplace=True)
 
-    return ds.sortby("time")
+    # autochunk and sort on time
+    ds_dask = ds.chunk({"time": -1})
+    ds_sorted = ds_dask.sortby("time", ascending=True).compute()
+    return ds_sorted
 
 
 def write_tile_dataset(ds, tile):
