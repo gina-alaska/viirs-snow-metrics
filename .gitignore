@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 # Serialization files
-.pickle
+*.pickle
 
 # C extensions
 *.so
