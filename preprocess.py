@@ -1,4 +1,4 @@
-"""Preprocess the downloaded VIIRS geotiffs to a netCDF dataset that represents all data for a single snow year."""
+"""Preprocess the downloaded VIIRS GeoTIFFs to a time-indexed netCDF dataset that represents all data for a single snow year."""
 
 import argparse
 import logging
@@ -107,10 +107,16 @@ def initialize_crs(geotiff):
         return src.crs
 
 
-def make_raster_stack(files):
-    # Create an in-memory raster stack
+def make_sorted_raster_stack(files, yyyydoy_strings):
+    # create an in-memory raster stack
+    sorted_files = []
+    for yyyydoy in yyyydoy_strings:
+        for f in files:
+            if yyyydoy in str(f): # would use if yyyydoy in parse_date(f) or == parse_date(f)
+                sorted_files.append(f)
+
     raster_stack = []
-    for file in files:
+    for file in sorted_files:
         with rio.open(file) as src:
             raster_stack.append(src.read(1))
     return raster_stack
@@ -128,7 +134,10 @@ def create_single_tile_dataset(tile_di, tile):
         convert_yyyydoy_to_date(parse_date(x))
         for x in tile_di[tile]["CGF_NDSI_Snow_Cover"]
     ]
-
+    # can we use the parse_date function to skip the prepending of 'A'?
+    dates.sort()
+    yyyydoy_strings = [str("A" + d.strftime("%Y") + d.strftime("%j")) for d in dates]
+    #
     ds_dict = dict()
     ds_coords = {
         "time": pd.DatetimeIndex(dates),
@@ -137,9 +146,12 @@ def create_single_tile_dataset(tile_di, tile):
     }
 
     # CP note: use CGF snow [data_variables[2]] for testing
+    # for data_var in [data_variables[2]]:
     for data_var in data_variables:
         logging.info(f"Stacking data for {data_var}...")
-        raster_stack = make_raster_stack(tile_di[tile][data_var])
+        raster_stack = make_sorted_raster_stack(
+            tile_di[tile][data_var], yyyydoy_strings
+        )
         data_var_dict = {data_var: (["time", "y", "x"], da.array(raster_stack))}
         ds_dict.update(data_var_dict)
 
@@ -150,15 +162,11 @@ def create_single_tile_dataset(tile_di, tile):
     logging.info(f"Assigning {transform} as dataset transform...")
     ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
     ds.rio.write_transform(transform, inplace=True)
-
-    # autochunk and sort on time
-    ds_dask = ds.chunk({"time": -1})
-    ds_sorted = ds_dask.sortby("time", ascending=True).compute()
-    return ds_sorted
+    return ds
 
 
 def write_tile_dataset(ds, tile):
-    filename = Path(preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}.nc")
+    filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}.nc"
     ds.to_netcdf(filename)
     logging.info(f"NetCDF dataset for tile {tile} wriiten to {filename}.")
 
