@@ -1,4 +1,4 @@
-"""Download VIIRS Data from the NSIDC DAAC. See https://github.com/nsidc/NSIDC-Data-Access-Notebook for reference - this module uses large amounts of code from notebook examples within that repo."""
+"""Download VIIRS Data from the NSIDC DAAC. See https://github.com/nsidc/NSIDC-Data-Access-Notebook for reference. This module uses large amounts of code from notebook examples within that repo."""
 
 import requests
 import getpass
@@ -12,11 +12,13 @@ import re
 import sys
 import time
 import logging
+import calendar
 from statistics import mean
 from xml.etree import ElementTree as ET
+from datetime import datetime, timedelta
 
 from luts import short_name
-from config import viirs_params, INPUT_DIR
+from config import viirs_params, INPUT_DIR, SNOW_YEAR
 
 
 def wipe_old_downloads(dl_path):
@@ -69,6 +71,52 @@ def check_data_version(ds_short_name):
     return latest_version
 
 
+def determine_tiles_for_bbox(bounding_box):
+    """
+    The granule search API isn't totally reliable: in testing superfluous tiles were being downloaded, so we need to ping the tile search API endpoint and use the results to trim down the list of granules.
+    """
+    tile_search_url = (
+        f"https://cmr.earthdata.nasa.gov/search/tiles?bounding_box={bounding_box}"
+    )
+    tile_list = requests.get(tile_search_url).json()
+
+    tile_strs = []
+    for tile in tile_list:
+        if tile[0] < 10:
+            hstr = f"h0{tile[0]}"
+        else:
+            hstr = f"h{tile[0]}"
+        if tile[1] < 10:
+            vstr = f"v0{tile[1]}"
+        else:
+            vstr = f"v{tile[1]}"
+        tile_str = hstr + vstr
+        tile_strs.append(tile_str)
+    reference_tiles = set(tile_strs)
+    logging.info(
+        f"The following tiles are needed to cover your area of interest: {reference_tiles}"
+    )
+    return reference_tiles
+
+
+def generate_monthly_dl_chunks(snow_year):
+    intervals = []
+
+    for month in range(1, 13):
+        year = snow_year if month >= 8 else snow_year + 1
+        start_date = datetime(year, month, 1)
+        _, last_day = calendar.monthrange(year, month)
+        end_date = datetime(year, month, last_day, 23, 59, 59)
+
+        interval = (
+            start_date.strftime("%Y-%m-%dT00:00:00Z"),
+            end_date.strftime("%Y-%m-%dT23:59:59Z"),
+        )
+
+        intervals.append(interval)
+    return intervals
+
+
 def start_api_session(ds_short_name, ds_latest_version):
     """Initate an authenticated NSDIC DAAC API session.
 
@@ -109,7 +157,7 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
         ds_short_name (str): The short name of the dataset.
         tstart (str): Start of temporal range (e.g., "2022-01-01T00:00:00Z").
         tstop (str): End of temporal range (e.g., "2022-12-31T23:59:59Z").
-        bbox (str): The bounding box in the format "min_lon,min_lat,max_lon,max_lat".
+        bbox (str): Bounding box in the format "min_lon,min_lat,max_lon,max_lat".
 
     Returns:
         list: A list of granules matching the specified criteria.
@@ -145,9 +193,21 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
     logging.info(
         f"The average size of each granule is {mean(granule_sizes):.2f} MB and the total size of all {len(granules)} granules is {sum(granule_sizes):.2f} MB"
     )
-    # CP note: `results` has low-level meta for all granules, retaining for debugging
-    # logging.info(results)
+    # CP note: low-level meta for all granules, retaining for debugging
+    logging.info(results)
     return granules
+
+
+def filter_granules_based_on_tiles(granules, ref):
+    """Filter granules based on a list of MODIS (i.e., VIIRS) sinusoidal grid tiles."""
+    filtered = [x for x in granules if x["producer_granule_id"].split(".")[2] in ref]
+    logging.info(f"After filtering {len(filtered)} granules remain.")
+
+    granule_sizes = [float(granule["granule_size"]) for granule in filtered]
+    logging.info(
+        f"The average size of each filtered granule is {mean(granule_sizes):.2f} MB and the total size of all filtered {len(filtered)} granules is {sum(granule_sizes):.2f} MB"
+    )
+    return filtered
 
 
 def set_n_orders_and_mode_and_page_size(granules):
@@ -176,13 +236,14 @@ def set_n_orders_and_mode_and_page_size(granules):
         return page_size
 
     page_size = set_page_size(granules)
-    page_num = math.ceil(len(granules) / page_size)
+    n_pages = math.ceil(len(granules) / page_size)
     request_mode = "async"
-    return page_num, request_mode, page_size
+    logging.info(f"Number of orders is {n_pages} with size {page_size}.")
+    return n_pages, request_mode, page_size
 
 
 def construct_request(
-    ds_latest_version, ds_short_name, tstart, tstop, bbox, req_mode, pg_size
+    ds_latest_version, ds_short_name, tstart, tstop, bbox, req_mode, pg_size, n_pages
 ):
     """Construct the API Download Request.
 
@@ -194,6 +255,7 @@ def construct_request(
         bbox (str): The bounding box for the geographic area of interest.
         req_mode (str): request mode ("async" or "stream").
         pg_size (int): The page size for the API request.
+        n_pages (int): Number of pages for API request (i.e., number of orders)
 
     Returns:
         tuple: containing a list of API endpoints and a dictionary of download parameters.
@@ -205,7 +267,8 @@ def construct_request(
         "version": ds_latest_version,
         "temporal": f"{tstart},{tstop}",
         "bounding_box": bbox,
-        "format": "GeoTIFF",  # CP note: NetCDF4-CF available but failed to return data in test
+        "bbox": bbox,
+        "format": "GeoTIFF",  # CP note: NetCDF4-CF option failed to return data in test
         "projection": "GEOGRAPHIC",
         "page_size": pg_size,
         "request_mode": req_mode,
@@ -217,7 +280,7 @@ def construct_request(
 
     # Construct request URL(s)
     endpoint_list = []
-    for i in range(page_num):
+    for i in range(n_pages):
         page_val = i + 1
         api_request = f"{base_url}?{dl_string}&page_num={page_val}"
         endpoint_list.append(api_request)
@@ -230,15 +293,18 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
     """Make the download orders. The API will need to verify the order, prepare it, and perhaps do some processing before making it ready for download. An authenticated session must pass to the scope of this function.
 
     Args:
-        n_orders (int): orders required based on the granules requested.
+        n_orders (int): orders (pages) required based on the granules requested.
         session (requests.sessions.Session): authenticated API session.
         dl_param_dict (dict): dictionary of download parameters.
 
     Returns:
-        download_url (str): URL for downloading the ordered data.
+        download_urls (list): URLs for downloading the ordered data.
     """
     base_url = "https://n5eil02u.ecs.nsidc.org/egi/request"
     # Request data service for each page number i.e. order
+    download_urls = []
+    logging.info(f"There are {n_orders} orders (number of pages).")
+
     for i in range(n_orders):
         page_val = i + 1
         logging.info(f"Async Data Order: {page_val}")
@@ -279,7 +345,7 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         # Continue loop while request is still processing
         while status == "pending" or status == "processing":
             logging.info("Status is not complete. Trying again.")
-            time.sleep(60)  # emit status once per minute
+            time.sleep(300)  # emit status every 5 min
             loop_response = session.get(statusURL)
             loop_response.raise_for_status()
             loop_root = ET.fromstring(loop_response.content)
@@ -301,30 +367,33 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
                 logging.error(message)
 
         if status == "complete":
-            download_url = "https://n5eil02u.ecs.nsidc.org/esir/" + orderID + ".zip"
-            logging.info(f"Zip download URL for order {orderID}: {download_url}")
-            return download_url
+            dl_url = "https://n5eil02u.ecs.nsidc.org/esir/" + orderID + ".zip"
+            logging.info(f"Zip download URL for order {orderID}: {dl_url}")
+            download_urls.append(dl_url)  # return list of these outside for loop!!
+            ## then the next function will accept the list and iterate through those.
         else:
             logging.error("Request failed.")
+    return download_urls
 
 
-def download_order(session, download_url, dl_path):
+def download_order(session, download_urls, dl_path):
     """Download and extract the ordered data.
 
     Args:
         session (requests.sessions.Session): authenticated session for making requests.
-        download_url (str): URL for downloading the ordered data.
+        download_urls (list): URL(s) for downloading the ordered data.
         dl_path (pathlib.Path): target directory for downloading and extracting data
 
     Returns:
         None
     """
 
-    logging.info("Beginning download of zipped output...")
-    zip_response = session.get(download_url)
-    zip_response.raise_for_status()
-    with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
-        z.extractall(dl_path)
+    for dl_url in download_urls:
+        logging.info("Beginning download of zipped output...")
+        zip_response = session.get(dl_url)
+        zip_response.raise_for_status()
+        with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
+            z.extractall(dl_path)
     logging.info("Data request is complete.")
 
 
@@ -359,7 +428,7 @@ def validate_download(dl_path, number_granules_requested):
         None
     """
     n_variables = 5  # CP note: consider parsing this as a var from the request
-    dl_file_count = sum(1 for x in dl_path.glob("*") if x.is_file())
+    dl_file_count = sum(1 for x in dl_path.rglob("*") if x.is_file())
     dl_files_expected = number_granules_requested * n_variables
     logging.info(f"{dl_file_count} files were downloaded.")
     if dl_file_count != dl_files_expected:
@@ -372,37 +441,45 @@ def validate_download(dl_path, number_granules_requested):
 
 if __name__ == "__main__":
     logging.basicConfig(filename="download.log", level=logging.INFO)
+
     wipe_old_downloads(INPUT_DIR)
 
     v = check_data_version(short_name)
+    ref_tiles = determine_tiles_for_bbox(viirs_params["bbox"])
+    snow_year_chunks = generate_monthly_dl_chunks(int(SNOW_YEAR))
+
     api_session = start_api_session(short_name, v)
 
-    granule_list = search_granules(
-        v,
-        short_name,
-        viirs_params["start_date"],
-        viirs_params["end_date"],
-        viirs_params["bbox"],
-    )
-    page_num, request_mode, page_size = set_n_orders_and_mode_and_page_size(
-        granule_list
-    )
-    api_request, dl_params = construct_request(
-        v,
-        short_name,
-        viirs_params["start_date"],
-        viirs_params["end_date"],
-        viirs_params["bbox"],
-        request_mode,
-        page_size,
-    )
+    for time_chunk in snow_year_chunks:
+        logging.info(f"Starting download for {time_chunk}.")
+        granule_list = search_granules(
+            v,
+            short_name,
+            time_chunk[0],
+            time_chunk[1],
+            viirs_params["bbox"],
+        )
+        filtered_granules = filter_granules_based_on_tiles(granule_list, ref_tiles)
 
-    dl_url = make_async_data_orders(page_num, api_session, dl_params)
-    print(f"URL for download: {dl_url}")
-    download_order(api_session, dl_url, INPUT_DIR)
+        page_num, request_mode, page_size = set_n_orders_and_mode_and_page_size(
+            granule_list
+        )
+        api_request, dl_params = construct_request(
+            v,
+            short_name,
+            time_chunk[0],
+            time_chunk[1],
+            viirs_params["bbox"],
+            request_mode,
+            page_size,
+            page_num,
+        )
 
-    flatten_download_directory(INPUT_DIR)
+        dl_urls = make_async_data_orders(page_num, api_session, dl_params)
+        download_order(api_session, dl_urls, INPUT_DIR)
+
+        flatten_download_directory(INPUT_DIR)
+        validate_download(INPUT_DIR, len(granule_list))
+
     api_session.close()
-
-    validate_download(INPUT_DIR, len(granule_list))
     print("Download Script Complete.")
