@@ -101,7 +101,7 @@ def construct_file_dict(fps):
        fps (list): A list of file paths.
 
     Returns:
-       (dict): hierarchical dift with keys of tile > data variable that map to the file paths of the downloaded GeoTIFFs.
+       (dict): hierarchical dict with keys of tile>>>data_variable that map to the file paths of the downloaded GeoTIFFs.
     """
     di = dict()
     for fp in fps:
@@ -178,7 +178,7 @@ def make_sorted_raster_stack(files, yyyydoy_strings):
     sorted_files = []
     for yyyydoy in yyyydoy_strings:
         for f in files:
-            if yyyydoy in str(f):  # would use if yyyydoy == parse_date(f)
+            if yyyydoy == parse_date(f):
                 sorted_files.append(f)
 
     raster_stack = []
@@ -209,11 +209,9 @@ def create_single_tile_dataset(tile_di, tile):
         convert_yyyydoy_to_date(parse_date(x))
         for x in tile_di[tile]["CGF_NDSI_Snow_Cover"]
     ]
-    ##
-    # can we use the parse_date function to skip the prepending of 'A'?
     dates.sort()
-    yyyydoy_strings = [str("A" + d.strftime("%Y") + d.strftime("%j")) for d in dates]
-    ##
+    yyyydoy_strings = [d.strftime("%Y") + d.strftime("%j") for d in dates]
+    
     ds_dict = dict()
     ds_coords = {
         "time": pd.DatetimeIndex(dates),
