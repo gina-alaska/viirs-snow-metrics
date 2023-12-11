@@ -10,23 +10,26 @@ Activate the environment:
 conda activate viirs-snow
 ```
 
+## System Requirements
+Production runs of this code will occur on GINA's "Elephant" machine. Additional testing may occur on SNAP's "Atlas" compute cluster. These are both Linux machines. Other execution environments are not supported. Users will need ample free disk space (order 500 GB) for a snow year.
+
 Developers and users must set the following environment variables:
 ### Directory Structure
 These variables will be read by the configuration file. If the directories do not exist they will be created for you at runtime.
 ##### `INPUT_DIR`
-Set to a path where you will download input data from NSIDC. Anticpate needing around 10GB disk space per year for the full AK domain. For a production run there are 82,003 granules of VNP10A1F version 2 totaling ~192 GB, so the download directory (`INPUT_DIR`) needs at least 200 GB free space for a full run. Example:
+Set to a path where you will download input data from NSIDC. Anticpate needing around 200GB disk space per snow year for the full AK domain. Example:
 ```sh
-export INPUT_DIR=/export/datadir/your_viirs_dir/VIIRS_L3_snow_cover
+export INPUT_DIR=/export/datadir/"$USER"_viirs_snow/VIIRS_L3_snow_cover
 ```
 ##### `SCRATCH_DIR`
 Set to the path where you will read/write preprocessed data prior to computation of the actual metrics. Something like:
 ```sh
-export SCRATCH_DIR=$HOME/VIIRS_snow_metrics/scratch
+export SCRATCH_DIR==/export/datadir/"$USER"_viirs_snow/scratch
 ```
 ##### `OUTPUT_DIR`
-Set to a path where you will write the snow metric outputs to disk. Consider using a shared disk location so multiple users can examine the output data.
+Set to a path where you will write the snow metric outputs to disk. Use a shared disk location so multiple users can examine the output data.
 ```sh
-export OUTPUT_DIR=/some_shared_disk/VIIRS_snow_metrics
+export OUTPUT_DIR=/export/datadir/"$USER"_viirs_snow/VIIRS_snow_metrics
 ``` 
 ### Runtime Options
 ##### `SNOW_YEAR`
@@ -51,3 +54,7 @@ Run this script with a `tile_id` argument to preprocess the downloaded data. The
 #### Example Usage
 `python preprocess.py h11v02`
 
+### `watermask.py`
+Run this script with a `tile_id` argument to create a water mask from the preproccesed data. The water mask will include grid cells classified as ocean and as lake or other inland water. 
+#### Example Usage
+`python watermask.py h11v02`
