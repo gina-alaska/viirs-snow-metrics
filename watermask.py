@@ -9,9 +9,7 @@ import xarray as xr
 import rasterio as rio
 import rioxarray
 import numpy as np
-import pandas as pd
 import dask
-import dask.array as da
 
 from config import SNOW_YEAR, preprocessed_dir
 
@@ -37,7 +35,7 @@ def generate_ocean_mask(ds_chunked):
     """Create a mask of ocean grid cells. Locations where the number of ocean observations exceeds the threshold in a given snow year are classified as ocean for that entire snow year. Such grid cells will be excluded (masked) from the snow metric computation."""
     ocean_mask = (
         ds_chunked.where(ds == inv_cgf_codes["Ocean"]).count(dim="time")
-        > n_obs_to_classify_ocean
+        <= n_obs_to_classify_ocean
     )
     return ocean_mask  # may need .compute() here or later
 
@@ -46,13 +44,13 @@ def generate_inland_water_mask(ds_chunked):
     """Create a mask of lake / inland water grid cells. Locations where the number of lake / inland water observations exceeds the threshold in a given snow year are classified as lake / inland water for that entire snow year. Such grid cells will be excluded (masked) from the snow metric computation."""
     inland_water_mask = (
         ds_chunked.where(ds == inv_cgf_codes["Lake / Inland water"]).count(dim="time")
-        > n_obs_to_classify_inland_water
+        <= n_obs_to_classify_inland_water
     )
     return inland_water_mask  # may need .compute() here or later
 
 
 def combine_masks(ocean_mask, inland_water_mask):
-    all_water_mask = ocean_mask or inland_water_mask
+    all_water_mask = np.logical_and(ocean_mask, inland_water_mask)
     return all_water_mask
 
 
