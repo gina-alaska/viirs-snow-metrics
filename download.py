@@ -368,8 +368,7 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         if status == "complete":
             dl_url = "https://n5eil02u.ecs.nsidc.org/esir/" + orderID + ".zip"
             logging.info(f"Zip download URL for order {orderID}: {dl_url}")
-            download_urls.append(dl_url)  # return list of these outside for loop!!
-            ## then the next function will accept the list and iterate through those.
+            download_urls.append(dl_url)
         else:
             logging.error("Request failed.")
     return download_urls
@@ -461,7 +460,7 @@ if __name__ == "__main__":
         filtered_granules = filter_granules_based_on_tiles(granule_list, ref_tiles)
 
         page_num, request_mode, page_size = set_n_orders_and_mode_and_page_size(
-            granule_list
+            filtered_granules
         )
         api_request, dl_params = construct_request(
             v,
