@@ -1,6 +1,8 @@
 """Compute the VIIRS snow metrics."""
 
 import pickle
+import logging
+import argparse
 import calendar
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -13,7 +15,11 @@ import numpy as np
 
 from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
 from luts import snow_cover_threshold
-from shared_utils import open_preprocessed_dataset
+from shared_utils import (
+    open_preprocessed_dataset,
+    fetch_raster_profile,
+    write_tagged_geotiff,
+)
 
 
 def get_first_snow_day_array(chunked_cgf_snow_cover):
@@ -74,8 +80,9 @@ if __name__ == "__main__":
     parser.add_argument("tile_id", type=str, help="MODIS/VIIRS Tile ID (ex. h11v02)")
     args = parser.parse_args()
     tile_id = args.tile_id
-
     logging.info(f"Computing snow metrics for tile {tile_id}.")
+
+    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     chunky_ds = open_preprocessed_dataset(fp, {"time": 52}, "CGF_NDSI_Snow_Cover")
     fsd = get_first_snow_day_array(chunky_ds)
     lsd = get_last_snow_day_array(chunky_ds)
