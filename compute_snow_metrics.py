@@ -1,4 +1,5 @@
 """Compute the VIIRS snow metrics."""
+
 import pickle
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -9,49 +10,60 @@ import rioxarray
 import dask
 import numpy as np
 
-from config import preprocessed_dir
+from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
 from luts import snow_cover_threshold
+from shared_utils import open_preprocessed_dataset
 
 
-def get_first_snow_day_array(chunked_ds):
-    """Compute first day of the full snow season (FSS start day)."""
+def get_first_snow_day_array(chunked_cgf_snow_cover):
+    """Compute first snow day (FSD) of the full snow season (FSS start day).
+
+    Args:
+       chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+
+    Returns:
+        xr.DataArray: integer values representing the day of year value where the CGF snowcover exceeds a threshold value for the first time.
+    """
     # actual logic has to be (snow threshold < ds value <= 100)
-    fsd_array = (chunked_ds["CGF_NDSI_Snow_Cover"] > snow_cover_threshold).argmax(
-        dim="time"
-    )
-    # may need to bump this value by one, because argmax yields an index, and we index from zero
-    return fsd_array.values.astype("int16")  # must verify dtype
-    # may want to just the delayed chunk, and only go for .values / .compute when writing the GeoTIFF
+    # or those values that are greater than 100 are masked out later on
+    fsd_array = (chunked_cgf_snow_cover > snow_cover_threshold).argmax(dim="time")
+    fsd_array += 1  # bumped this value by one, because argmax yields an index, and we index from zero, but don't want 0 values to represent a DOY in the output
+    return fsd_array
+
+    # .values.astype("int16")
+    # must verify dtype, i think int16 is what modis is doing
 
 
-def get_last_snow_day_array(chunked_ds):
-    """Compute last day of the full snow season (FSS start day)."""
-    ## reverse this
-    lsd_array = (chunked_ds["CGF_NDSI_Snow_Cover"] > snow_cover_threshold).argmax(
+def get_last_snow_day_array(chunked_cgf_snow_cover):
+    """Compute last snow day (LSD) of the full snow season (FSS end day).
+
+    The logic for last snow day is the same as for first snow day - but we've reversed the time dimension of the Dataset.
+    """
+
+    ds_reverse_time = chunked_cgf_snow_cover.isel(time=slice(None, None, -1))
+
+    last_occurrence_reverse = (ds_reverse_time > snow_cover_threshold).argmax(
         dim="time"
     )
-    # may need to bump this value by one, because argmax yields an index, and we index from zero
-    return lsd_array.values.astype("int16")  # must verify dtype
-    # may want to just the delayed chunk, and only go for .values / .compute when writing the GeoTIFF
+
+    # must revert time indices back to the original order
+    lsd_array = chunked_cgf_snow_cover.time.size - last_occurrence_reverse - 1
+    # we could could omit the `- 1` above, but we'll be explicit and match the value bump used in FSD
+    lsd_array += 1
+    return lsd_array  # .values.astype("int16")
 
 
 def shift_to_day_of_snow_year_values(doy_arr):
     """Day-of-snow-year corresponds to the familiar day of year (i.e., 1 to 365), but spans two calendar years (e.g., the first day of the second year is day 1 + 365 = 366). Because our snow year is defined as August 1 to July 31, possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year 212 + 365 = 577). When $SNOW_YEAR + 1 is a leap year, the maximum value may be 578."""
-    # leap_year = is_leap_year()
+    # leap_year = is_leap_year(SNOW_YEAR + 1)
     leap_year = None  # placeholder
-    # this assumes that the "earliest" value is 1
-    if not leap:
-        dosy_arr = doy_arr + 212
+    if not leap_year:
+        dosy_arr = doy_arr + 212 
     else:
         dosy_arr = doy_arr + 213
     return dosy_arr
-    pass
 
 
-def compute_full_snow_season_range(fsd_array, lsd_array):
+def compute_full_snow_season_range(lsd_array, fsd_array):
     """Compute range (i.e., length) of the full snow season."""
-    return (lsd_array - fsd_array) - 1
-
-
-def map_nodata_values():
-    pass
+    return lsd_array - fsd_array - 1
