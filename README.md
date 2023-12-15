@@ -60,6 +60,7 @@ Run this script with a `tile_id` argument to create masks from the preproccesed 
 `python compute_masks.py h11v02`
 
 ### `compute_snow_metrics.py`
+Run this script with a `tile_id` argument to compute snow metrics from the preproccesed data. Outputs will be single-band GeoTIFFs (one per metric per tile) written to the `$SCRATCH_DIR/$SNOW_YEAR/single_metric_geotiffs` directory. Execution time is TBD.
 #### Example Usage
 `python compute_snow_metrics.py h11v02`
 
