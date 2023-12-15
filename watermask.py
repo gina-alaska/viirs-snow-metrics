@@ -12,33 +12,33 @@ import numpy as np
 import dask
 
 from config import SNOW_YEAR, preprocessed_dir, mask_dir
-
 from luts import (
     n_obs_to_classify_ocean,
     n_obs_to_classify_inland_water,
     cgf_snow_cover_codes,
 )
+from shared_utils import open_preprocessed_dataset
 
 # CP note: inverting to reference array values by the descriptive string
 inv_cgf_codes = {v: k for k, v in cgf_snow_cover_codes.items()}
 
 
-def open_preprocessed_dataset(tile):
-    """Open a preprocessed dataset for a given tile.
+# def open_preprocessed_dataset(tile):
+#     """Open a preprocessed dataset for a given tile.
 
-    Args:
-        tile (str): The tile identifier.
+#     Args:
+#         tile (str): The tile identifier.
 
-    Returns:
-       xarray.Dataset: The chunked dataset.
-    """
-    fp = f"snow_year_{SNOW_YEAR}_{tile}.nc"
-    logging.info(f"Opening preprocessed file {fp} as chunked Dataset...")
-    # CP note: I don't think chunk values are too sensitive here, so I chose 52 for 52 weeks in a year
-    with xr.open_dataset(preprocessed_dir / fp).CGF_NDSI_Snow_Cover.chunk(
-        {"time": 52}
-    ) as ds_chunked:
-        return ds_chunked
+#     Returns:
+#        xarray.Dataset: The chunked dataset.
+#     """
+#     fp = f"snow_year_{SNOW_YEAR}_{tile}.nc"
+#     logging.info(f"Opening preprocessed file {fp} as chunked Dataset...")
+#     # CP note: I don't think chunk values are too sensitive here, so I chose 52 for 52 weeks in a year
+#     with xr.open_dataset(preprocessed_dir / fp).CGF_NDSI_Snow_Cover.chunk(
+#         {"time": 52}
+#     ) as ds_chunked:
+#         return ds_chunked
 
 
 def generate_ocean_mask(ds_chunked):
@@ -150,7 +150,9 @@ if __name__ == "__main__":
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
 
-    ds = open_preprocessed_dataset(tile_id)
+    #ds = open_preprocessed_dataset(tile_id)
+    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+    ds = open_preprocessed_dataset(fp, {"time": "auto"}, "CGF_NDSI_Snow_Cover")
     ocean_mask = generate_ocean_mask(ds)
     inland_water_mask = generate_inland_water_mask(ds)
     all_water_mask = combine_masks(ocean_mask, inland_water_mask)
