@@ -17,28 +17,14 @@ from luts import (
     n_obs_to_classify_inland_water,
     cgf_snow_cover_codes,
 )
-from shared_utils import open_preprocessed_dataset
+from shared_utils import (
+    open_preprocessed_dataset,
+    fetch_raster_profile,
+    write_tagged_geotiff,
+)
 
 # CP note: inverting to reference array values by the descriptive string
 inv_cgf_codes = {v: k for k, v in cgf_snow_cover_codes.items()}
-
-
-# def open_preprocessed_dataset(tile):
-#     """Open a preprocessed dataset for a given tile.
-
-#     Args:
-#         tile (str): The tile identifier.
-
-#     Returns:
-#        xarray.Dataset: The chunked dataset.
-#     """
-#     fp = f"snow_year_{SNOW_YEAR}_{tile}.nc"
-#     logging.info(f"Opening preprocessed file {fp} as chunked Dataset...")
-#     # CP note: I don't think chunk values are too sensitive here, so I chose 52 for 52 weeks in a year
-#     with xr.open_dataset(preprocessed_dir / fp).CGF_NDSI_Snow_Cover.chunk(
-#         {"time": 52}
-#     ) as ds_chunked:
-#         return ds_chunked
 
 
 def generate_ocean_mask(ds_chunked):
@@ -101,28 +87,28 @@ def combine_masks(ocean_mask, inland_water_mask):
     return all_water_mask
 
 
-def fetch_raster_profile(tile_id):
-    """Fetch a raster profile to generate output mask rasters that match the downloaded NSIDC rasters.
+# def fetch_raster_profile(tile_id):
+#     """Fetch a raster profile to generate output mask rasters that match the downloaded NSIDC rasters.
 
-    We load the GeoTIFF hash table to quicly extract a reference raster creation profile. Preserving these profiles should make the final alignment /
-    mosaicking of the raster products a smoother process. We can also use this hash table to perform intermittent QC checks. For example, say FSD = 100 for some grid cell. We should then be able to map that value (100) to a date, then check the GeoTIFFs for that date, the date prior, and the date after, and observe the expected behavior (snow condition toggling from off to on).
+#     We load the GeoTIFF hash table to quicly extract a reference raster creation profile. Preserving these profiles should make the final alignment /
+#     mosaicking of the raster products a smoother process. We can also use this hash table to perform intermittent QC checks. For example, say FSD = 100 for some grid cell. We should then be able to map that value (100) to a date, then check the GeoTIFFs for that date, the date prior, and the date after, and observe the expected behavior (snow condition toggling from off to on).
 
-    Args:
-        tile_id (str): The tile identifier.
+#     Args:
+#         tile_id (str): The tile identifier.
 
-    Returns:
-        dict: The raster profile.
-    """
+#     Returns:
+#         dict: The raster profile.
+#     """
 
-    with open("file_dict.pickle", "rb") as handle:
-        geotiff_dict = pickle.load(handle)
-    geotiff_reference = geotiff_dict[tile_id]["CGF_NDSI_Snow_Cover"][0]
-    with rio.open(geotiff_reference) as src:
-        out_profile = src.profile
-    out_profile.update({"dtype": "int8"})
-    out_profile.update({"nodata": 0})
-    logging.info(f"Mask GeoTIFFs will use the raster creation profile {out_profile}.")
-    return out_profile
+#     with open("file_dict.pickle", "rb") as handle:
+#         geotiff_dict = pickle.load(handle)
+#     geotiff_reference = geotiff_dict[tile_id]["CGF_NDSI_Snow_Cover"][0]
+#     with rio.open(geotiff_reference) as src:
+#         out_profile = src.profile
+#     out_profile.update({"dtype": "int8"})
+#     out_profile.update({"nodata": 0})
+#     logging.info(f"Mask GeoTIFFs will use the raster creation profile {out_profile}.")
+#     return out_profile
 
 
 def write_mask_to_geotiff(tile_id, mask_name, out_profile, arr):
@@ -150,18 +136,20 @@ if __name__ == "__main__":
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
 
-    #ds = open_preprocessed_dataset(tile_id)
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     ds = open_preprocessed_dataset(fp, {"time": "auto"}, "CGF_NDSI_Snow_Cover")
+    
     ocean_mask = generate_ocean_mask(ds)
     inland_water_mask = generate_inland_water_mask(ds)
     all_water_mask = combine_masks(ocean_mask, inland_water_mask)
-    out_profile = fetch_raster_profile(tile_id)
-
-    write_mask_to_geotiff(tile_id, "ocean", out_profile, ocean_mask.values)
+    
+    mask_profile = fetch_raster_profile(
+            tile_id, {"dtype": "int8", "nodata": 0}
+        )
+    write_mask_to_geotiff(tile_id, "ocean", mask_profile, ocean_mask.values)
     write_mask_to_geotiff(
-        tile_id, "inland_water", out_profile, inland_water_mask.values
+        tile_id, "inland_water", mask_profile, inland_water_mask.values
     )
-    write_mask_to_geotiff(tile_id, "all_water", out_profile, all_water_mask.values)
+    write_mask_to_geotiff(tile_id, "all_water", mask_profile, all_water_mask.values)
 
     print("Masking Script Complete.")
