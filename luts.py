@@ -35,3 +35,5 @@ cgf_snow_cover_codes = {
 }
 
 snow_cover_threshold = 50
+n_obs_to_classify_ocean = 10
+n_obs_to_classify_inland_water = 10

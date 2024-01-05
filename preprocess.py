@@ -14,7 +14,7 @@ import pandas as pd
 import dask
 import dask.array as da
 
-from config import INPUT_DIR, SNOW_YEAR, preprocessed_dir
+from config import SNOW_YEAR, preprocessed_dir, snow_year_input_dir
 from luts import data_variables
 
 
@@ -28,7 +28,7 @@ def list_input_files(src_dir):
        list: A list of all .tif files in the source directory.
     """
     fps = [x for x in src_dir.glob("*.tif")]
-    logging.info(f"$INPUT_DIR file count is {len(fps)}.")
+    logging.info(f"Downloaded file count is {len(fps)}.")
     logging.info(f"Files that will be included in dataset: {fps}.")
     return fps
 
@@ -211,7 +211,7 @@ def create_single_tile_dataset(tile_di, tile):
     ]
     dates.sort()
     yyyydoy_strings = [d.strftime("%Y") + d.strftime("%j") for d in dates]
-    
+
     ds_dict = dict()
     ds_coords = {
         "time": pd.DatetimeIndex(dates),
@@ -259,7 +259,7 @@ if __name__ == "__main__":
     tile_id = args.tile_id
 
     logging.info(f"Creating dataset for tile {tile_id}.")
-    geotiffs = list_input_files(INPUT_DIR)
+    geotiffs = list_input_files(snow_year_input_dir)
     geotiff_di = construct_file_dict(geotiffs)
 
     tile_ds = create_single_tile_dataset(geotiff_di, tile_id)

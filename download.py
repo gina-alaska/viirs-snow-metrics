@@ -18,11 +18,11 @@ from xml.etree import ElementTree as ET
 from datetime import datetime, timedelta
 
 from luts import short_name
-from config import viirs_params, INPUT_DIR, SNOW_YEAR
+from config import viirs_params, snow_year_input_dir, SNOW_YEAR
 
 
 def wipe_old_downloads(dl_path):
-    """Wipe prior downloads but retain the target directory. Processing pipeline is simplified with assumption that all data in `INPUT_DIR` maps to a single cohesive processing run.
+    """Wipe prior downloads but retain the target directory. Processing pipeline is simplified with assumption that all data in `$INPUT_DIR/$SNOW_YEAR` maps to a single cohesive processing run.
 
     Args:
         dl_path (pathlib.Path): The path to the download directory.
@@ -267,7 +267,6 @@ def construct_request(
         "version": ds_latest_version,
         "temporal": f"{tstart},{tstop}",
         "bounding_box": bbox,
-        "bbox": bbox,
         "format": "GeoTIFF",  # CP note: NetCDF4-CF option failed to return data in test
         "projection": "GEOGRAPHIC",
         "page_size": pg_size,
@@ -369,8 +368,7 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         if status == "complete":
             dl_url = "https://n5eil02u.ecs.nsidc.org/esir/" + orderID + ".zip"
             logging.info(f"Zip download URL for order {orderID}: {dl_url}")
-            download_urls.append(dl_url)  # return list of these outside for loop!!
-            ## then the next function will accept the list and iterate through those.
+            download_urls.append(dl_url)
         else:
             logging.error("Request failed.")
     return download_urls
@@ -442,7 +440,7 @@ def validate_download(dl_path, number_granules_requested):
 if __name__ == "__main__":
     logging.basicConfig(filename="download.log", level=logging.INFO)
 
-    wipe_old_downloads(INPUT_DIR)
+    wipe_old_downloads(snow_year_input_dir)
 
     v = check_data_version(short_name)
     ref_tiles = determine_tiles_for_bbox(viirs_params["bbox"])
@@ -462,7 +460,7 @@ if __name__ == "__main__":
         filtered_granules = filter_granules_based_on_tiles(granule_list, ref_tiles)
 
         page_num, request_mode, page_size = set_n_orders_and_mode_and_page_size(
-            granule_list
+            filtered_granules
         )
         api_request, dl_params = construct_request(
             v,
@@ -476,10 +474,10 @@ if __name__ == "__main__":
         )
 
         dl_urls = make_async_data_orders(page_num, api_session, dl_params)
-        download_order(api_session, dl_urls, INPUT_DIR)
+        download_order(api_session, dl_urls, snow_year_input_dir)
 
-        flatten_download_directory(INPUT_DIR)
-        validate_download(INPUT_DIR, len(granule_list))
+        flatten_download_directory(snow_year_input_dir)
+        validate_download(snow_year_input_dir, len(granule_list))
 
     api_session.close()
     print("Download Script Complete.")
