@@ -114,7 +114,7 @@ if __name__ == "__main__":
             metric_name,
             single_metric_profile,
             metric_array.compute().values.astype("int16")
-            # we don't actually have to call .compute(), but this coomunicates a chunked DataArray input and there is no performance penalty vs. just calling .values
+            # we don't actually have to call .compute(), but this communicates a chunked DataArray input and there is no performance penalty vs. just calling .values
         )
 
     print("Snow Metric Computation Script Complete.")

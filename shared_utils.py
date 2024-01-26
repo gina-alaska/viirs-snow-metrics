@@ -9,6 +9,7 @@ import rasterio as rio
 
 from config import SNOW_YEAR
 
+
 def open_preprocessed_dataset(fp, chunk_dict, data_variable):
     """Open a preprocessed dataset for a given tile.
 
@@ -49,7 +50,6 @@ def fetch_raster_profile(tile_id, updates=None):
     return out_profile
 
 
-
 def write_tagged_geotiff(dst_dir, tile_id, tag_name, tag_value, out_profile, arr):
     """Write data to a GeoTIFF file.
 
@@ -72,4 +72,3 @@ def write_tagged_geotiff(dst_dir, tile_id, tag_name, tag_value, out_profile, arr
         dst.update_tags(tag_name=tag_value)
         dst.write(arr, 1)
     return None
-

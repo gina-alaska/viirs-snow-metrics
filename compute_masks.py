@@ -94,34 +94,25 @@ if __name__ == "__main__":
 
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     ds = open_preprocessed_dataset(fp, {"time": "auto"}, "CGF_NDSI_Snow_Cover")
-    
+
     ocean_mask = generate_ocean_mask(ds)
     inland_water_mask = generate_inland_water_mask(ds)
     all_water_mask = combine_masks(ocean_mask, inland_water_mask)
-    
-    mask_profile = fetch_raster_profile(
-            tile_id, {"dtype": "int8", "nodata": 0}
-        )
+
+    mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0})
     write_tagged_geotiff(
-        mask_dir,
-        tile_id,
-        "mask",
-        "ocean",
-        mask_profile,
-        ocean_mask.values)
+        mask_dir, tile_id, "mask", "ocean", mask_profile, ocean_mask.values
+    )
     write_tagged_geotiff(
         mask_dir,
         tile_id,
         "mask",
         "inland_water",
         mask_profile,
-        inland_water_mask.values)
+        inland_water_mask.values,
+    )
     write_tagged_geotiff(
-        mask_dir,
-        tile_id,
-        "mask",
-        "all_water",
-        mask_profile,
-        all_water_mask.values)
+        mask_dir, tile_id, "mask", "all_water", mask_profile, all_water_mask.values
+    )
 
     print("Masking Script Complete.")
