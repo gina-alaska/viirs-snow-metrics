@@ -40,9 +40,7 @@ def get_first_snow_day_array(chunked_cgf_snow_cover):
     Returns:
         xr.DataArray: integer values representing the day of year value where the CGF snowcover exceeds a threshold value for the first time.
     """
-    # actual logic has to be (snow threshold < ds value <= 100)
-    # or those values that are greater than 100 are masked out later on
-    fsd_array = (chunked_cgf_snow_cover > snow_cover_threshold).argmax(dim="time")
+    fsd_array = ((chunked_cgf_snow_cover > snow_cover_threshold) & (chunked_cgf_snow_cover <= 100)).argmax(dim="time")
     fsd_array += 1  # bumped this value by one, because argmax yields an index, and we index from zero, but don't want 0 values to represent a DOY in the output
     return shift_to_day_of_snow_year_values(fsd_array)
 
@@ -54,7 +52,7 @@ def get_last_snow_day_array(chunked_cgf_snow_cover):
     """
 
     ds_reverse_time = chunked_cgf_snow_cover.isel(time=slice(None, None, -1))
-    last_occurrence_reverse = (ds_reverse_time > snow_cover_threshold).argmax(
+    last_occurrence_reverse = ((ds_reverse_time > snow_cover_threshold) & (chunked_cgf_snow_cover <= 100)).argmax(
         dim="time"
     )
     # must revert time indices back to the original order
@@ -91,7 +89,7 @@ if __name__ == "__main__":
     chunky_ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
     )
-
+ 
     snow_metrics = dict()
     snow_metrics.update({"first_snow_day": get_first_snow_day_array(chunky_ds)})
     snow_metrics.update({"last_snow_day": get_last_snow_day_array(chunky_ds)})
