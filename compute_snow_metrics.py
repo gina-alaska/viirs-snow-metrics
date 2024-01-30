@@ -4,10 +4,7 @@ import logging
 import argparse
 import calendar
 
-import xarray as xr
 import rasterio as rio
-import rioxarray
-import dask
 import numpy as np
 
 from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
@@ -19,26 +16,30 @@ from shared_utils import (
 )
 
 
-def apply_threshold(chunked_cgf_snow_cover):
-    """Apply the snow cover threshold to the CGF snow cover datacube. Grid cells exceeding the threshold value are considered to be snow-covered.
-
-    Note that 100 is the maximum valid snow cover value.
-    
-    Args:
-        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
-    Returns:
-        snow_on (xr.DataArray): boolean values representing snow cover"""
-    snow_on = ((chunked_cgf_snow_cover > snow_cover_threshold) & (chunked_cgf_snow_cover <= 100))
-    return snow_on
-
-
 def fill_winter_darkness(chunked_cgf_snow_cover):
     """
     Fill winter darkness with the snow cover value from the previous day.
     """
-    chunked_cgf_snow_cover = chunked_cgf_snow_cover.where(chunked_cgf_snow_cover != cgf_snow_cover_codes["Night"], np.nan)
+    chunked_cgf_snow_cover = chunked_cgf_snow_cover.where(
+        chunked_cgf_snow_cover != cgf_snow_cover_codes["Night"], np.nan
+    )
     chunked_cgf_snow_cover = chunked_cgf_snow_cover.ffill(dim="time")
     return chunked_cgf_snow_cover
+
+
+def apply_threshold(chunked_cgf_snow_cover):
+    """Apply the snow cover threshold to the CGF snow cover datacube. Grid cells exceeding the threshold value are considered to be snow-covered.
+
+    Note that 100 is the maximum valid snow cover value.
+
+    Args:
+        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+    Returns:
+        snow_on (xr.DataArray): boolean values representing snow cover"""
+    snow_on = (chunked_cgf_snow_cover > snow_cover_threshold) & (
+        chunked_cgf_snow_cover <= 100
+    )
+    return snow_on
 
 
 def shift_to_day_of_snow_year_values(doy_arr):
@@ -114,10 +115,11 @@ if __name__ == "__main__":
     chunky_ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
     )
- 
+    darkness_filled = fill_winter_darkness(chunky_ds)
+    snow_on = apply_threshold(darkness_filled)
     snow_metrics = dict()
-    snow_metrics.update({"first_snow_day": get_first_snow_day_array(chunky_ds)})
-    snow_metrics.update({"last_snow_day": get_last_snow_day_array(chunky_ds)})
+    snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_on)})
+    snow_metrics.update({"last_snow_day": get_last_snow_day_array(snow_on)})
     snow_metrics.update(
         {
             "fss_range": compute_full_snow_season_range(
