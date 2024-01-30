@@ -3,7 +3,6 @@
 import logging
 import argparse
 import calendar
-from datetime import datetime, timedelta
 
 import xarray as xr
 import rasterio as rio
@@ -12,12 +11,34 @@ import dask
 import numpy as np
 
 from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
-from luts import snow_cover_threshold
+from luts import snow_cover_threshold, cgf_snow_cover_codes
 from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
     write_tagged_geotiff,
 )
+
+
+def apply_threshold(chunked_cgf_snow_cover):
+    """Apply the snow cover threshold to the CGF snow cover datacube. Grid cells exceeding the threshold value are considered to be snow-covered.
+
+    Note that 100 is the maximum valid snow cover value.
+    
+    Args:
+        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+    Returns:
+        snow_on (xr.DataArray): boolean values representing snow cover"""
+    snow_on = ((chunked_cgf_snow_cover > snow_cover_threshold) & (chunked_cgf_snow_cover <= 100))
+    return snow_on
+
+
+def fill_winter_darkness(chunked_cgf_snow_cover):
+    """
+    Fill winter darkness with the snow cover value from the previous day.
+    """
+    chunked_cgf_snow_cover = chunked_cgf_snow_cover.where(chunked_cgf_snow_cover != cgf_snow_cover_codes["Night"], np.nan)
+    chunked_cgf_snow_cover = chunked_cgf_snow_cover.ffill(dim="time")
+    return chunked_cgf_snow_cover
 
 
 def shift_to_day_of_snow_year_values(doy_arr):
@@ -31,32 +52,36 @@ def shift_to_day_of_snow_year_values(doy_arr):
     return doy_arr
 
 
-def get_first_snow_day_array(chunked_cgf_snow_cover):
+def get_first_snow_day_array(snow_on):
     """Compute first snow day (FSD) of the full snow season (FSS start day).
 
     Args:
-       chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+       snow_on (xr.DataArray): boolean values representing snow cover
 
     Returns:
         xr.DataArray: integer values representing the day of year value where the CGF snowcover exceeds a threshold value for the first time.
     """
-    fsd_array = ((chunked_cgf_snow_cover > snow_cover_threshold) & (chunked_cgf_snow_cover <= 100)).argmax(dim="time")
-    fsd_array += 1  # bumped this value by one, because argmax yields an index, and we index from zero, but don't want 0 values to represent a DOY in the output
+    fsd_array = snow_on.argmax(dim="time")
+    fsd_array += 1  # bump value by one, because argmax yields an index, and we index from 0, but don't want 0 values to represent a DOY in the output
     return shift_to_day_of_snow_year_values(fsd_array)
 
 
-def get_last_snow_day_array(chunked_cgf_snow_cover):
+def get_last_snow_day_array(snow_on):
     """Compute last snow day (LSD) of the full snow season (FSS end day).
 
-    The logic for last snow day is the same as for first snow day - but we've reversed the time dimension of the Dataset.
+    The logic for last snow day is the same as for first snow day - but the time dimension of the input DataArray is reversed.
+
+    Args:
+       snow_on (xr.DataArray): boolean values representing snow cover
+
+    Returns:
+        xr.DataArray: integer values representing the day of year value where the CGF snowcover exceeds a threshold value for the final time.
     """
 
-    ds_reverse_time = chunked_cgf_snow_cover.isel(time=slice(None, None, -1))
-    last_occurrence_reverse = ((ds_reverse_time > snow_cover_threshold) & (chunked_cgf_snow_cover <= 100)).argmax(
-        dim="time"
-    )
+    snow_on_reverse_time = snow_on.isel(time=slice(None, None, -1))
+    last_occurrence_reverse = snow_on_reverse_time.argmax(dim="time")
     # must revert time indices back to the original order
-    lsd_array = chunked_cgf_snow_cover.time.size - last_occurrence_reverse - 1
+    lsd_array = snow_on.time.size - last_occurrence_reverse - 1
     # we could could omit the `- 1` above, but we'll be explicit and match the value bump used in FSD
     lsd_array += 1
     return shift_to_day_of_snow_year_values(lsd_array)
