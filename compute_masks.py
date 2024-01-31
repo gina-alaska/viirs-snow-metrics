@@ -12,15 +12,13 @@ from luts import (
     n_obs_to_classify_ocean,
     n_obs_to_classify_inland_water,
     cgf_snow_cover_codes,
+    inv_cgf_codes
 )
 from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
     write_tagged_geotiff,
 )
-
-# CP note: inverting to reference array values by the descriptive string
-inv_cgf_codes = {v: k for k, v in cgf_snow_cover_codes.items()}
 
 
 def generate_ocean_mask(ds_chunked):

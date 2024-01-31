@@ -19,7 +19,6 @@ data_variables = [
     "Daily_NDSI_Snow_Cover",
 ]
 
-# CP note: some of these could be remapped to a single int for NoData
 cgf_snow_cover_codes = {
     **{i: "NDSI snow cover valid" for i in range(101)},
     201: "No decision",
@@ -33,6 +32,8 @@ cgf_snow_cover_codes = {
     254: "L1B fill",
     255: "L2 fill",
 }
+# CP note: inverting above to reference array values by the descriptive string
+inv_cgf_codes = {v: k for k, v in cgf_snow_cover_codes.items()}
 
 snow_cover_threshold = 50
 n_obs_to_classify_ocean = 10
