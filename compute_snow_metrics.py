@@ -8,7 +8,7 @@ import rasterio as rio
 import numpy as np
 
 from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
-from luts import snow_cover_threshold, cgf_snow_cover_codes
+from luts import snow_cover_threshold, inv_cgf_codes
 from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
@@ -21,7 +21,7 @@ def fill_winter_darkness(chunked_cgf_snow_cover):
     Fill winter darkness with the snow cover value from the previous day.
     """
     chunked_cgf_snow_cover = chunked_cgf_snow_cover.where(
-        chunked_cgf_snow_cover != cgf_snow_cover_codes["Night"], np.nan
+        chunked_cgf_snow_cover != inv_cgf_codes["Night"], np.nan
     )
     chunked_cgf_snow_cover = chunked_cgf_snow_cover.ffill(dim="time")
     return chunked_cgf_snow_cover
@@ -40,6 +40,32 @@ def apply_threshold(chunked_cgf_snow_cover):
         chunked_cgf_snow_cover <= 100
     )
     return snow_on
+
+
+def _longest_true_streak(time_series):
+    # xr.apply_ufunc barfs on all False time series without this block
+    if not np.any(time_series):
+        return np.nan
+    # 1 where time_series is True (i.e., snow is on), and 0 where False
+    streaks = np.where(time_series, 1, 0)
+    # difference between consecutive elements in streaks
+    diff = np.diff(streaks)
+    # diff is 1 (the start of a streak, 0 to 1) or -1 (end of a streak, 1 to 0)
+    start_indices = np.where(diff == 1)[0] + 1
+    end_indices = np.where(diff == -1)[0]
+    # If the first element of streaks is 1, then a streak starts on day 0
+    if streaks[0] == 1:
+        start_indices = np.r_[0, start_indices]
+    # If the last element of streaks is 1, then a streak ends on the last day
+    if streaks[-1] == 1:
+        end_indices = np.r_[end_indices, len(streaks) - 1]
+    # find lengths of each streak and find the longest one of a minimum duration
+    lengths = end_indices - start_indices
+    longest_streak_index = np.argmax(lengths)
+    if lengths[longest_streak_index] < 14:
+        return np.nan # if no streak is at least 14 days long
+    return start_indices[longest_streak_index]
+    # need another funciton to return end index
 
 
 def shift_to_day_of_snow_year_values(doy_arr):
@@ -93,6 +119,16 @@ def compute_full_snow_season_range(lsd_array, fsd_array):
     return lsd_array - fsd_array - 1
 
 
+def compute_css_start(snow_on):
+    css_start_array = xr.apply_ufunc(_longest_true_streak, snow_on, input_core_dims=[['time']], output_dtypes=[float], vectorize=True, dask="parallelized")
+    # TODO add shift_to_day_of_snow_year_values
+    # TODO double check index values vs. DOY values
+    return css_start_array
+
+def compute_css_end(snow_on):
+    css_end = None
+    return css_end
+
 def apply_mask(mask_fp, array_to_mask):
     """Mask out values from the snow metric array."""
     with rio.open(mask_fp) as src:
@@ -116,10 +152,10 @@ if __name__ == "__main__":
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
     )
     darkness_filled = fill_winter_darkness(chunky_ds)
-    snow_on = apply_threshold(darkness_filled)
+    snow_is_on = apply_threshold(darkness_filled)
     snow_metrics = dict()
-    snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_on)})
-    snow_metrics.update({"last_snow_day": get_last_snow_day_array(snow_on)})
+    snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
+    snow_metrics.update({"last_snow_day": get_last_snow_day_array(snow_is_on)})
     snow_metrics.update(
         {
             "fss_range": compute_full_snow_season_range(
@@ -127,6 +163,14 @@ if __name__ == "__main__":
             )
         }
     )
+    snow_metrics.update({"css_start": compute_css_start(snow_is_on)})
+
+
+    # iterate through keys in snow_metrics dict and apply mask
+    # for metric_name, metric_array in snow_metrics.items():
+    #     snow_metrics[metric_name] = apply_mask(
+    #         mask_dir / f"{tile_id}_mask.tif", metric_array
+    #     )
 
     single_metric_profile = fetch_raster_profile(
         tile_id, {"dtype": "int16", "nodata": 0}
