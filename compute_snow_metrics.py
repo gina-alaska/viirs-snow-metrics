@@ -6,9 +6,16 @@ import calendar
 
 import rasterio as rio
 import numpy as np
+import xarray as xr
+from dask.distributed import Client
 
 from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
-from luts import snow_cover_threshold, inv_cgf_codes
+from luts import (
+    snow_cover_threshold,
+    inv_cgf_codes,
+    css_days_threshold,
+    css_days_break_threshold,
+)
 from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
@@ -18,7 +25,13 @@ from shared_utils import (
 
 def fill_winter_darkness(chunked_cgf_snow_cover):
     """
-    Fill winter darkness with the snow cover value from the previous day.
+    Fill grid cells classified as "Night" (i.e. polar / winter darkness) with the snow cover value from the most recent previous day with valid data.
+
+    Args:
+        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+
+    Returns:
+        xr.DataArray: snow cover datacube with winter darkness filled
     """
     chunked_cgf_snow_cover = chunked_cgf_snow_cover.where(
         chunked_cgf_snow_cover != inv_cgf_codes["Night"], np.nan
@@ -42,34 +55,17 @@ def apply_threshold(chunked_cgf_snow_cover):
     return snow_on
 
 
-def _longest_true_streak(time_series):
-    # xr.apply_ufunc barfs on all False time series without this block
-    if not np.any(time_series):
-        return np.nan
-    # 1 where time_series is True (i.e., snow is on), and 0 where False
-    streaks = np.where(time_series, 1, 0)
-    # difference between consecutive elements in streaks
-    diff = np.diff(streaks)
-    # diff is 1 (the start of a streak, 0 to 1) or -1 (end of a streak, 1 to 0)
-    start_indices = np.where(diff == 1)[0] + 1
-    end_indices = np.where(diff == -1)[0]
-    # If the first element of streaks is 1, then a streak starts on day 0
-    if streaks[0] == 1:
-        start_indices = np.r_[0, start_indices]
-    # If the last element of streaks is 1, then a streak ends on the last day
-    if streaks[-1] == 1:
-        end_indices = np.r_[end_indices, len(streaks) - 1]
-    # find lengths of each streak and find the longest one of a minimum duration
-    lengths = end_indices - start_indices
-    longest_streak_index = np.argmax(lengths)
-    if lengths[longest_streak_index] < 14:
-        return np.nan # if no streak is at least 14 days long
-    return start_indices[longest_streak_index]
-    # need another funciton to return end index
-
-
 def shift_to_day_of_snow_year_values(doy_arr):
-    """Day-of-snow-year corresponds to the familiar day of year (i.e., 1 to 365), but spans two calendar years (e.g., the first day of the second year is day 1 + 365 = 366). Because our snow year is defined as August 1 to July 31, possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year 212 + 365 = 577). When $SNOW_YEAR + 1 is a leap year, the maximum value may be 578."""
+    """Shifts day-of-year values to day-of-snow-year values.
+
+    Day-of-snow-year values mimic familiar day-of-year values (i.e., 1 to 365) but span two calendar years (e.g., the first day of the second calendar year = 1 + 365 = 366). A snow year is defined as August 1 through July 31, and so possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year 212 + 365 = 577). When $SNOW_YEAR + 1 is a leap year, the maximum value may be 578.
+
+    Args:
+        doy_arr (array-like): Day-of-year values.
+
+    Returns:
+        array-like: Day-of-snow-year values.
+    """
 
     leap_year = calendar.isleap(int(SNOW_YEAR) + 1)
     if not leap_year:
@@ -86,7 +82,7 @@ def get_first_snow_day_array(snow_on):
        snow_on (xr.DataArray): boolean values representing snow cover
 
     Returns:
-        xr.DataArray: integer values representing the day of year value where the CGF snowcover exceeds a threshold value for the first time.
+        xr.DataArray: integer values representing the day-of-snow-year value where the CGF snowcover exceeds a threshold value for the first time.
     """
     fsd_array = snow_on.argmax(dim="time")
     fsd_array += 1  # bump value by one, because argmax yields an index, and we index from 0, but don't want 0 values to represent a DOY in the output
@@ -96,13 +92,13 @@ def get_first_snow_day_array(snow_on):
 def get_last_snow_day_array(snow_on):
     """Compute last snow day (LSD) of the full snow season (FSS end day).
 
-    The logic for last snow day is the same as for first snow day - but the time dimension of the input DataArray is reversed.
+    The logic for last snow day is the same as for first snow day, but the time dimension of the input DataArray is reversed.
 
     Args:
        snow_on (xr.DataArray): boolean values representing snow cover
 
     Returns:
-        xr.DataArray: integer values representing the day of year value where the CGF snowcover exceeds a threshold value for the final time.
+        xr.DataArray: integer values representing the day-of-snow-year value where the CGF snowcover exceeds a threshold value for the final time.
     """
 
     snow_on_reverse_time = snow_on.isel(time=slice(None, None, -1))
@@ -115,19 +111,109 @@ def get_last_snow_day_array(snow_on):
 
 
 def compute_full_snow_season_range(lsd_array, fsd_array):
-    """Compute range (i.e., length) of the full snow season."""
+    """Compute range (i.e., length) of the full snow season.
+
+    Args:
+        lsd_array (xr.DataArray): last snow day (LSD) values.
+        fsd_array (xr.DataArray): first snow day (FSD) values.
+
+    Returns:
+    xr.DataArray: lengths of the full snow seasons.
+    """
     return lsd_array - fsd_array - 1
 
 
-def compute_css_start(snow_on):
-    css_start_array = xr.apply_ufunc(_longest_true_streak, snow_on, input_core_dims=[['time']], output_dtypes=[float], vectorize=True, dask="parallelized")
-    # TODO add shift_to_day_of_snow_year_values
-    # TODO double check index values vs. DOY values
-    return css_start_array
+def _continuous_snow_season_metrics(time_series):
+    """Compute metrics related to continuous snow season (CSS) from a time series of snow data.
 
-def compute_css_end(snow_on):
-    css_end = None
-    return css_end
+    This function returns a tuple of five values representing five different CSS metrics: first CSS day, last CSS day, CSS range, number of discrete CSS segments, and total number of days within CSS segments. If the time series does not contain one or more CSS segments, the function returns a five-tuple of zeros.
+
+    First and last CSS day metrics are initially have values computed from the index values of the time series. These values are incremented by 1 to convert them from index values to day-of-year values, and then these values are converted again to day-of-snow-year values. The other metrics represent either counts or durations and thus are not shifted to day-of-snow-year values. This function is intended to be used with xr.apply_ufunc.
+
+    Args:
+        time_series (xr.DataArray or numpy array): A time series of snow data, where True represents 'snow on' and False represents 'snow off'.
+
+    Returns:
+        tuple: A tuple of five CSS metrics.
+    """
+    # return this tuple when there is no css
+    # a value of 0 is chosen to represent no css data
+    no_css_return = tuple([0] * 5)
+
+    # xr.apply_ufunc fails on all False (never a "snow on" condition) time series without this block
+    if not np.any(time_series):
+        return no_css_return
+
+    # 1 where time_series is True (i.e., snow is on), and 0 where False
+    streaks = np.where(time_series, 1, 0)
+    # difference between consecutive elements in streaks
+    diff = np.diff(streaks)
+    # diff is 1 (the start of a streak, 0 to 1) or -1 (end of a streak, 1 to 0)
+    start_indices = np.where(diff == 1)[0] + 1
+    end_indices = np.where(diff == -1)[0]
+
+    # CP note: np.r_ a convenience function for concatenating arrays, basically injecting start/end indices into the arrays when needed to handle edge cases
+    # case when a streak starts on day index 0
+    if streaks[0] == 1:
+        start_indices = np.r_[0, start_indices]
+    # case when a streak ends on the last day index
+    if streaks[-1] == 1:
+        end_indices = np.r_[end_indices, len(streaks) - 1]
+
+    # find longest streak of a minimum duration
+    lengths = end_indices - start_indices
+    # number of css segments
+    css_segment_num = np.where(lengths >= css_days_threshold)[0].size
+    # total number of css days
+    tot_css_days = lengths[np.where(lengths >= css_days_threshold)].sum()
+
+    # get longest css
+    longest_streak_index = np.argmax(lengths)
+    # if no streak is minimum duration or longer, there are no css metrics
+    if lengths[longest_streak_index] < css_days_threshold:
+        return no_css_return
+
+    # otherwise, return the metrics
+    longest_css_start = start_indices[longest_streak_index]
+    longest_css_end = end_indices[longest_streak_index]
+    longest_css_range = longest_css_end - longest_css_start + 1
+    # shift from time index values to DOY values
+    longest_css_start += 1
+    longest_css_end += 1
+    return (
+        shift_to_day_of_snow_year_values(longest_css_start),
+        shift_to_day_of_snow_year_values(longest_css_end),
+        longest_css_range,
+        css_segment_num,
+        tot_css_days,
+    )
+
+
+def compute_css_metrics(snow_on):
+    css_results = xr.apply_ufunc(
+        _continuous_snow_season_metrics,
+        snow_on,
+        input_core_dims=[["time"]],
+        output_dtypes=[float, float, float, float, float],
+        output_core_dims=[[], [], [], [], []],
+        vectorize=True,
+        dask="parallelized",
+    )
+    css_metric_dict = dict(
+        zip(
+            [
+                "longest_css_start",
+                "longest_css_end",
+                "longest_css_range",
+                "css_segment_num",
+                "tot_css_days",
+            ],
+            css_results,
+        )
+    )
+
+    return css_metric_dict
+
 
 def apply_mask(mask_fp, array_to_mask):
     """Mask out values from the snow metric array."""
@@ -146,12 +232,17 @@ if __name__ == "__main__":
     tile_id = args.tile_id
     logging.info(f"Computing snow metrics for tile {tile_id}.")
 
+    client = Client()
+
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
 
     chunky_ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
     )
+
+    logging.info(f"Filling 'Night' Grid Cells...")
     darkness_filled = fill_winter_darkness(chunky_ds)
+    logging.info(f"Applying Snow Cover Threshold...")
     snow_is_on = apply_threshold(darkness_filled)
     snow_metrics = dict()
     snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
@@ -163,14 +254,12 @@ if __name__ == "__main__":
             )
         }
     )
-    snow_metrics.update({"css_start": compute_css_start(snow_is_on)})
-
+    snow_metrics.update(compute_css_metrics(snow_is_on))
 
     # iterate through keys in snow_metrics dict and apply mask
-    # for metric_name, metric_array in snow_metrics.items():
-    #     snow_metrics[metric_name] = apply_mask(
-    #         mask_dir / f"{tile_id}_mask.tif", metric_array
-    #     )
+    combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
+    for metric_name, metric_array in snow_metrics.items():
+        snow_metrics[metric_name] = apply_mask(combined_mask, metric_array)
 
     single_metric_profile = fetch_raster_profile(
         tile_id, {"dtype": "int16", "nodata": 0}
@@ -185,5 +274,5 @@ if __name__ == "__main__":
             metric_array.compute().values.astype("int16")
             # we don't actually have to call .compute(), but this communicates a chunked DataArray input and there is no performance penalty vs. just calling .values
         )
-
+    client.close()
     print("Snow Metric Computation Script Complete.")
