@@ -136,14 +136,25 @@ def _continuous_snow_season_metrics(time_series):
     Returns:
         tuple: A tuple of five CSS metrics.
     """
-    # return this tuple when there is no css
-    # a value of 0 is chosen to represent no css data
-    no_css_return = tuple([0] * 5)
+    # tuples for special css cases
+    # when there is no css, values of 0 represents no css data
+    no_css = tuple([0] * 5)
+    # when snow cover is always on (e.g., glaciers)
+    leap_year = calendar.isleap(int(SNOW_YEAR) + 1)
+    if not leap_year:
+        year_length = 365
+        snow_year_doy_end = 577
+    else:
+        year_length =  366
+        snow_year_doy_end = 578
+    glacier_css = (214, snow_year_doy_end, year_length, 1, year_length)
 
-    # xr.apply_ufunc fails on all False (never a "snow on" condition) time series without this block
+    # xr.apply_ufunc fails on all False (never "snow on" conditions) series without this block
     if not np.any(time_series):
-        return no_css_return
-
+        return no_css
+    if np.all(time_series):
+        return glacier_css
+    
     # 1 where time_series is True (i.e., snow is on), and 0 where False
     streaks = np.where(time_series, 1, 0)
     # difference between consecutive elements in streaks
@@ -152,6 +163,8 @@ def _continuous_snow_season_metrics(time_series):
     start_indices = np.where(diff == 1)[0] + 1
     end_indices = np.where(diff == -1)[0]
 
+    # CSS can have intervening snow-free periods of some max duration
+    
     # CP note: np.r_ a convenience function for concatenating arrays, basically injecting start/end indices into the arrays when needed to handle edge cases
     # case when a streak starts on day index 0
     if streaks[0] == 1:
@@ -171,7 +184,7 @@ def _continuous_snow_season_metrics(time_series):
     longest_streak_index = np.argmax(lengths)
     # if no streak is minimum duration or longer, there are no css metrics
     if lengths[longest_streak_index] < css_days_threshold:
-        return no_css_return
+        return no_css
 
     # otherwise, return the metrics
     longest_css_start = start_indices[longest_streak_index]
@@ -232,6 +245,7 @@ if __name__ == "__main__":
     tile_id = args.tile_id
     logging.info(f"Computing snow metrics for tile {tile_id}.")
 
+    # A Dask LocalCluster Client speeds this script up 10X
     client = Client()
 
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
