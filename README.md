@@ -56,7 +56,7 @@ Run this script with a `tile_id` argument to preprocess the downloaded data. The
 `python preprocess.py h11v02`
 
 ### `compute_masks.py`
-Run this script with a `tile_id` argument to create masks from the preproccesed data. Currently the script will create four mask GeoTIFFs for the following conditions: ocean, lake / inland water, L2 Fill (i.e., no data), and a combined mask of the previous conditions. Masks will be written to disk as GeoTIFFs to the `$SCRATCH_DIR/$SNOW_YEAR/masks` directory. Execution time is about 15 minutes per tile. Additional masks may include other fill values and areas classified as glaciers or perennial snowfields.
+Run this script with a `tile_id` argument to create masks from the preproccesed data. Currently the script will create four mask GeoTIFFs for the following conditions: ocean, lake / inland water, L2 Fill (i.e., no data), and a combined mask of the previous conditions. Masks will be written to disk as GeoTIFFs to the `$SCRATCH_DIR/$SNOW_YEAR/masks` directory. Execution time is about 2 minutes per tile.
 #### Example Usage
 `python compute_masks.py h11v02`
 
@@ -70,11 +70,19 @@ Run this script with a `tile_id` argument to compute snow metrics from the prepr
 6. CSS Range: the length (duration) of the longest CSS segment.
 7. Number of discrete CSS segments.
 8. Total CSS Days: summed duration of all CSS segments
+9. Number of Snow Days: count of all snow-covered days in a snow year
+10. Number of No Snow Days: count of all not snow-covered days in a snow year
 
 Execution time is about 10 minutes per tile.
 
 #### Example Usage
 `python compute_snow_metrics.py h11v02`
+
+### `postprocess.py`
+Run this script with no arguments postprocess all data in the `single_metric_geotiffs` directory. Currently the script only reprojects the data to ESPG:3338 and writes to a compressed GeoTIFF. Execution time is about 2 minutes per tile. Additional tasks will include stitching together multiple tiles and stacking individual rasters to a final multiband GeoTIFF.
+
+#### Example Usage
+`python postprocess.py`
 
 ## Other Modules
 ### `shared_utils.py`
