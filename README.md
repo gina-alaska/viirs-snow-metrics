@@ -54,7 +54,21 @@ Run this script with a `tile_id` argument to preprocess the downloaded data. The
 #### Example Usage
 `python preprocess.py h11v02`
 
-### `watermask.py`
-Run this script with a `tile_id` argument to create a water mask from the preproccesed data. The water mask will include grid cells classified as ocean and as lake or other inland water. This script will create three GeoTIFFs: an ocean mask, a lake / inland water mask, and a combined mask of all grid cells classified as water. Masks will be written to disk as GeoTIFFs to the `$SCRATCH_DIR/$SNOW_YEAR/masks` directory. Execution time is less than 5 minutes per tile.
+### `compute_masks.py`
+Run this script with a `tile_id` argument to create masks from the preproccesed data. This includes water masks with grid cells classified as ocean and as lake or other inland water. Currently the script will create three GeoTIFFs: an ocean mask, a lake / inland water mask, and a combined mask of all grid cells classified as water. Masks will be written to disk as GeoTIFFs to the `$SCRATCH_DIR/$SNOW_YEAR/masks` directory. Execution time is less than 5 minutes per tile. Additional masks may include no data values and areas classified as glaciers or perennial snowfields.
 #### Example Usage
-`python watermask.py h11v02`
+`python compute_masks.py h11v02`
+
+### `compute_snow_metrics.py`
+Run this script with a `tile_id` argument to compute snow metrics from the preproccesed data. Outputs will be single-band GeoTIFFs (one per metric per tile) written to the `$SCRATCH_DIR/$SNOW_YEAR/single_metric_geotiffs` directory. The metrics currently computed include:
+1. First Snow Day (FSD) of the full snow season (FSS). Also called FSS start day.
+2. Last Snow Day (LSD) of the FSS. Also called FSS end day.
+3. FSS Range: the length (duration) of the full snow season.
+
+
+#### Example Usage
+`python compute_snow_metrics.py h11v02`
+
+## Other Modules
+### `shared_utils.py`
+This module contains convenience and utility functions that are used across multiple other scripts and modules. At the moment these mostly are functions for file input and output.
