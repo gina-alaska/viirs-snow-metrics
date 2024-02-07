@@ -120,7 +120,7 @@ def compute_full_snow_season_range(lsd_array, fsd_array):
     Returns:
     xr.DataArray: lengths of the full snow seasons.
     """
-    return lsd_array - fsd_array - 1
+    return lsd_array - fsd_array
 
 
 def _continuous_snow_season_metrics(time_series):
