@@ -4,6 +4,7 @@ import argparse
 import logging
 
 import numpy as np
+from dask.distributed import Client
 
 from config import SNOW_YEAR, preprocessed_dir, mask_dir
 from luts import n_obs_to_classify_ocean, n_obs_to_classify_inland_water, inv_cgf_codes
@@ -98,7 +99,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
-
+    client = Client()
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
@@ -132,5 +133,5 @@ if __name__ == "__main__":
     write_tagged_geotiff(
         mask_dir, tile_id, "mask", "combined", mask_profile, combined_mask
     )
-
+    client.close()
     print("Mask Generation Script Complete.")
