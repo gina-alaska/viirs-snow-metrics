@@ -105,8 +105,6 @@ def get_last_snow_day_array(snow_on):
     last_occurrence_reverse = snow_on_reverse_time.argmax(dim="time")
     # must revert time indices back to the original order
     lsd_array = snow_on.time.size - last_occurrence_reverse - 1
-    # we could could omit the `- 1` above, but we'll be explicit and match the value bump used in FSD
-    lsd_array += 1
     return shift_to_day_of_snow_year_values(lsd_array)
 
 
