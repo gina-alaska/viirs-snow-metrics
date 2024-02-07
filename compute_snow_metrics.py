@@ -55,23 +55,24 @@ def apply_threshold(chunked_cgf_snow_cover):
     return snow_on
 
 
-def shift_to_day_of_snow_year_values(doy_arr):
+def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
     """Shifts day-of-year values to day-of-snow-year values.
 
-    Day-of-snow-year values mimic familiar day-of-year values (i.e., 1 to 365) but span two calendar years (e.g., the first day of the second calendar year = 1 + 365 = 366). A snow year is defined as August 1 through July 31, and so possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year 212 + 365 = 577). When $SNOW_YEAR + 1 is a leap year, the maximum value may be 578.
+    Day-of-snow-year values mimic familiar day-of-year values (i.e., 1 to 365) but span two calendar years (e.g., the first day of the second calendar year = 1 + 365 = 366). A snow year is defined as August 1 through July 31, and so possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year (212 + 365) = 577. When $SNOW_YEAR + 1 is a leap year, the maximum value may be 578.
 
     Args:
         doy_arr (array-like): Day-of-year values.
+        needs_leap_shift (bool): whether to shift the values by one day for leap years - even if the snow year contains a leap year, metrics where the leap day has not been accrued should not be shifted (e.g., FSD). Feb. 29th is the 60th day of a leap year.
 
     Returns:
         array-like: Day-of-snow-year values.
     """
 
     leap_year = calendar.isleap(int(SNOW_YEAR) + 1)
-    if not leap_year:
-        doy_arr += 212
-    else:
+    if leap_year and needs_leap_shift:
         doy_arr += 213
+    else:
+        doy_arr += 212
     return doy_arr
 
 
@@ -105,7 +106,35 @@ def get_last_snow_day_array(snow_on):
     last_occurrence_reverse = snow_on_reverse_time.argmax(dim="time")
     # must revert time indices back to the original order
     lsd_array = snow_on.time.size - last_occurrence_reverse - 1
-    return shift_to_day_of_snow_year_values(lsd_array)
+    # we could just could omit the `- 1` above...
+    # but we'll be explicit and match index-to-DOY pattern used in FSD
+    # lsd_array += 1
+    return shift_to_day_of_snow_year_values(lsd_array, needs_leap_shift=True)
+
+
+def count_snow_days(snow_on):
+    """Count the number of snow-covered days in a snow season.
+
+    Args:
+        snow_on (xr.DataArray): boolean values representing snow cover
+
+    Returns:
+        xr.DataArray: integer values representing the number of snow days in the snow season.
+    """
+    return snow_on.sum(dim="time")
+
+
+def count_no_snow_days(chunked_cgf_snow_cover):
+    """Count the number of snow-free days in a snow season.
+
+    Args:
+        darkness_filled (xr.DataArray): darkness-filled cloug-gap filled snow cover
+
+    Returns:
+        xr.DataArray: integer values representing the number of no-snow days in the snow season.
+    """
+    snow_off_days = chunked_cgf_snow_cover <= snow_cover_threshold
+    return snow_off_days.sum(dim="time")
 
 
 def compute_full_snow_season_range(lsd_array, fsd_array):
@@ -118,7 +147,7 @@ def compute_full_snow_season_range(lsd_array, fsd_array):
     Returns:
     xr.DataArray: lengths of the full snow seasons.
     """
-    return lsd_array - fsd_array
+    return lsd_array - fsd_array + 1
 
 
 def _continuous_snow_season_metrics(time_series):
@@ -143,16 +172,16 @@ def _continuous_snow_season_metrics(time_series):
         year_length = 365
         snow_year_doy_end = 577
     else:
-        year_length =  366
+        year_length = 366
         snow_year_doy_end = 578
-    glacier_css = (214, snow_year_doy_end, year_length, 1, year_length)
+    glacier_css = (213, snow_year_doy_end, year_length, 1, year_length)
 
     # xr.apply_ufunc fails on all False (never "snow on" conditions) series without this block
     if not np.any(time_series):
         return no_css
     if np.all(time_series):
         return glacier_css
-    
+
     # 1 where time_series is True (i.e., snow is on), and 0 where False
     streaks = np.where(time_series, 1, 0)
     # difference between consecutive elements in streaks
@@ -162,7 +191,7 @@ def _continuous_snow_season_metrics(time_series):
     end_indices = np.where(diff == -1)[0]
 
     # CSS can have intervening snow-free periods of some max duration
-    
+
     # CP note: np.r_ a convenience function for concatenating arrays, basically injecting start/end indices into the arrays when needed to handle edge cases
     # case when a streak starts on day index 0
     if streaks[0] == 1:
@@ -238,7 +267,7 @@ if __name__ == "__main__":
     logging.basicConfig(filename="compute_metrics.log", level=logging.INFO)
 
     parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
-    parser.add_argument("tile_id", type=str, help="MODIS/VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     args = parser.parse_args()
     tile_id = args.tile_id
     logging.info(f"Computing snow metrics for tile {tile_id}.")
@@ -266,6 +295,8 @@ if __name__ == "__main__":
             )
         }
     )
+    snow_metrics.update({"snow_days": count_snow_days(snow_is_on)})
+    snow_metrics.update({"no_snow_days": count_no_snow_days(darkness_filled)})
     snow_metrics.update(compute_css_metrics(snow_is_on))
 
     # iterate through keys in snow_metrics dict and apply mask
@@ -280,7 +311,7 @@ if __name__ == "__main__":
         write_tagged_geotiff(
             single_metric_dir,
             tile_id,
-            "snow_metric",
+            "",
             metric_name,
             single_metric_profile,
             metric_array.compute().values.astype("int16")
