@@ -85,7 +85,7 @@ Execution time is about 10 minutes per tile.
 `python compute_snow_metrics.py h11v02`
 
 ### `postprocess.py`
-Run this script with no arguments postprocess all data in the `single_metric_geotiffs` directory. Currently the script only reprojects the data to ESPG:3338 and writes to a compressed GeoTIFF. Execution time is about 2 minutes per tile. Additional tasks will include stitching together multiple tiles and stacking individual rasters to a final multiband GeoTIFF.
+Run this script with no arguments to postprocess all data in the `single_metric_geotiffs` directory. The script spawns subprocesses that call GDAL routines to reproject GeoTIFFs to ESPG:3338, align grids, and mosaic tiles. Outputs a written to compressed GeoTIFFs. Additional tasks will include stacking individual rasters to a final multiband GeoTIFF.
 
 #### Example Usage
 `python postprocess.py`
