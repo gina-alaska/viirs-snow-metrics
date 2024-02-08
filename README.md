@@ -44,6 +44,12 @@ Set to True (note this will be passed as a `string` type rather than `bool`) to 
 export DEV_MODE=True
 ```
 
+###### `MALLOC_TRIM_THRESHOLD_` (optional)
+On occasion Dask worker memory is not released back to the OS. Setting this value to 0 or some other low number will aggressively and automatically trim the memory. This may yield a more stable, though perhaps slower, performance.
+```sh
+export MALLOC_TRIM_THRESHOLD_=0
+```
+
 ## Usage
 ### `download.py`
 Run this script with no arguments to download the source dataset from the NSIDC DAAC. Users will be prompted to enter valid Earthdata credentials. Users must have an Earthdata account to download the necessary data. Data will be downloaded to the `$INPUT_DIR/$SNOW_YEAR` directory. The script will ask to wipe the contents of `$INPUT_DIR/$SNOW_YEAR` before proceeding with the download. Total download time will of course depend on your connection speed, but it will also depend on how busy the upstream data service is and how complicated your data orders are. For example, if you are asking the service to perform [reformatting (e.g., h5 to GeoTIFF)](https://nsidc.org/data/user-resources/help-center/table-key-value-pair-kvp-operands-subsetting-reformatting-and-reprojection-services) the service will take longer to prepare the order. Consider executing `download.py` in a screen session or similar. It may take a full day to prepare the order for a download of an entire snow year. The order preparation may take longer than the download itself. A log file (`download.log`) that captures the API endpoints used as well as information about the requested granules will be written to the same directory as the download script.
