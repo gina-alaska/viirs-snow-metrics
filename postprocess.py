@@ -25,6 +25,7 @@ def reproject_to_3338():
                 [
                     "gdalwarp",
                     "-overwrite",
+                    "-tap",
                     "-t_srs",
                     "EPSG:3338",
                     "-r",
