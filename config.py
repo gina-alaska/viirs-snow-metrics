@@ -30,6 +30,9 @@ mask_dir.mkdir(exist_ok=True)
 #     subdirectory for single metric GeoTIFFs
 single_metric_dir = snow_year_scratch_dir.joinpath("single_metric_geotiffs")
 single_metric_dir.mkdir(exist_ok=True)
+#     subdirectory for uncertainty analysis GeoTIFFs
+uncertainty_dir = snow_year_scratch_dir.joinpath("uncertainty_geotiffs")
+uncertainty_dir.mkdir(exist_ok=True)
 
 
 # path to a directory for output snow metric results
