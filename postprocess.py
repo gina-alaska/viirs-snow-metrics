@@ -12,6 +12,10 @@ def reproject_to_3338():
 
     Spawns a `gdalwarp` subprocess with these parameters:
     `gdalwarp -t_srs EPSG:3338 -r nearest -tr 375 375 src.tif dst.tif`
+
+    Args: None
+
+    Returns: None
     """
 
     for file_name in os.listdir(single_metric_dir):
@@ -53,7 +57,9 @@ def group_files_by_metric():
     Returns a dictionary with metric names as keys and lists of file paths as values.
 
     Args: None
-    Returns: dict: {metric: [file1, file2, ...]}"""
+
+    Returns: dict: {metric: [file1, file2, ...]}
+    """
 
     metric_groups = defaultdict(list)
 
@@ -67,6 +73,16 @@ def group_files_by_metric():
 
 
 def merge_geotiffs(file_list, output_file):
+    """Merge a list of GeoTIFF files into a single GeoTIFF file.
+
+    Spawns a `gdalbuildvrt` subprocess to create a VRT file from the list of files, then a `gdal_translate` subprocess to convert the VRT to a GeoTIFF.
+
+    Args:
+        file_list (list): List of file paths to merge.
+        output_file (str): Path to the output GeoTIFF file.
+
+    Returns: None
+    """
     # creating a temp textfile to pipe into gdalbuildvrt
     merge_list_file = "list_of_files_to_merge.txt"
     with open(merge_list_file, "w") as f:
@@ -82,7 +98,7 @@ def merge_geotiffs(file_list, output_file):
             "-resolution",
             "highest",
             "-r",
-            "average",
+            "nearest",
             vrt_file,
         ],
         capture_output=True,
