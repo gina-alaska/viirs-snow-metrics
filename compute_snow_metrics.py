@@ -184,13 +184,16 @@ def _continuous_snow_season_metrics(time_series):
 
     # 1 where time_series is True (i.e., snow is on), and 0 where False
     streaks = np.where(time_series, 1, 0)
+    # CSS can have intervening snow-free periods of some max duration
+    # tolerate up to two consecutive False values in a streak
+    for i in range(1, len(streaks) - 1):
+        if streaks[i] == 0 and streaks[i - 1] == 1 and streaks[i + 1] == 1:
+            streaks[i] = 1
     # difference between consecutive elements in streaks
     diff = np.diff(streaks)
     # diff is 1 (the start of a streak, 0 to 1) or -1 (end of a streak, 1 to 0)
     start_indices = np.where(diff == 1)[0] + 1
     end_indices = np.where(diff == -1)[0]
-
-    # CSS can have intervening snow-free periods of some max duration
 
     # CP note: np.r_ a convenience function for concatenating arrays, basically injecting start/end indices into the arrays when needed to handle edge cases
     # case when a streak starts on day index 0
@@ -256,7 +259,13 @@ def compute_css_metrics(snow_on):
 
 
 def apply_mask(mask_fp, array_to_mask):
-    """Mask out values from the snow metric array."""
+    """Mask out values from the snow metric array.
+
+    Args:
+        mask_fp (str): file path to the mask GeoTIFF
+        array_to_mask (xr.DataArray): snow metric array to be masked
+    Returns:
+        xr.DataArray: masked snow metric array, masked values set to 0"""
     with rio.open(mask_fp) as src:
         mask_arr = src.read(1)
     mask_applied = mask_arr * array_to_mask
@@ -314,7 +323,7 @@ if __name__ == "__main__":
             "",
             metric_name,
             single_metric_profile,
-            metric_array.compute().values.astype("int16")
+            metric_array.compute().values.astype("int16"),
             # we don't actually have to call .compute(), but this communicates a chunked DataArray input and there is no performance penalty vs. just calling .values
         )
     client.close()
