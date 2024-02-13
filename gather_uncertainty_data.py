@@ -81,6 +81,21 @@ def count_bowtie_trim(ds_chunked):
     return bowtie_trim_count
 
 
+def count_darkness(ds_chunked):
+    """Count the per-pixel occurrence of polar/winter darkness in the snow year.
+
+    Args:
+        ds_chunked (xarray.Dataset): The chunked dataset.
+
+    Returns:
+        xarray.DataArray: count of "Night" values".
+    """
+
+    logging.info(f"Counting occurence of `Night` values...")
+    darkness_count = (ds_chunked == inv_cgf_codes["Night"]).sum(dim="time")
+    return darkness_count
+
+
 def get_max_cloud_persistence(ds_chunked):
     """Determine maximum per-pixel cloud persistence value.
 
@@ -118,6 +133,7 @@ if __name__ == "__main__":
     uncertainty_data.update({"missing L1B": count_missing_l1b_occurence(cgf_snow_ds)})
     uncertainty_data.update({"L1B fail": count_l1b_calibration_fail(cgf_snow_ds)})
     uncertainty_data.update({"bowtie trim": count_bowtie_trim(cgf_snow_ds)})
+    uncertainty_data.update({"darkness": count_darkness(cgf_snow_ds)})
     cgf_snow_ds.close()
 
     cloud_ds = open_preprocessed_dataset(
