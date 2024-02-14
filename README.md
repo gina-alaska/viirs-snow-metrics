@@ -18,14 +18,25 @@ Developers and users must set the following environment variables:
 #### Directory Structure
 These variables will be read by the configuration file. If the directories do not exist they will be created for you at runtime.
 ###### `INPUT_DIR`
-Set to a path where you will download input data from NSIDC. Anticpate needing around 80 GB free disk space per snow year to download all tiles for the full Alaska spatial domain. Example:
+Set to a path where you will download and reference the input data from NSIDC. Anticpate needing around 80 GB free disk space per snow year to download all tiles for the full Alaska spatial domain. Example:
 ```sh
 export INPUT_DIR=/export/datadir/"$USER"_viirs_snow/VIIRS_L3_snow_cover
 ```
 ###### `SCRATCH_DIR`
-Set to the path where you will read/write preprocessed data prior to computation of the actual metrics. Something like:
+Set the path where you will read/write intermediate data. Something like:
 ```sh
 export SCRATCH_DIR=/export/datadir/"$USER"_viirs_snow/scratch
+```
+The scratch directory structure will look something like this:
+```
+/export/datadir/$USER_viirs_snow/scratch
+└── $SNOW_YEAR
+    ├── masks
+    ├── preprocessed
+    ├── reprojected_merged_single_metric_geotiffs
+    ├── reprojected_single_metric_geotiffs
+    ├── single_metric_geotiffs
+    └── uncertainty_geotiffs
 ```
 ###### `OUTPUT_DIR`
 Set to a path where you will write the snow metric outputs to disk. Use a shared disk location so multiple users can examine the output data.
@@ -45,7 +56,7 @@ export DEV_MODE=True
 ```
 
 ###### `MALLOC_TRIM_THRESHOLD_` (optional)
-On occasion Dask worker memory is not released back to the OS. Setting this value to 0 or some other low number will aggressively and automatically trim the memory. This may yield a more stable, though perhaps slower, performance.
+On occasion Dask worker memory is not released back to the OS. Setting this value to `0` or some other low number will aggressively and automatically trim the memory. This may yield a more stable, though perhaps slower, performance.
 ```sh
 export MALLOC_TRIM_THRESHOLD_=0
 ```
@@ -67,7 +78,7 @@ Run this script with a `tile_id` argument to create masks from the preproccesed 
 `python compute_masks.py h11v02`
 
 ### `compute_snow_metrics.py`
-Run this script with a `tile_id` argument to compute snow metrics from the preproccesed data. Outputs will be single-band GeoTIFFs (one per metric per tile) written to the `$SCRATCH_DIR/$SNOW_YEAR/single_metric_geotiffs` directory. The metrics currently computed include:
+Run this script with a `tile_id` argument to compute snow metrics from the preproccesed data. Outputs will be single-band GeoTIFFs (one per metric per tile) written to the `$SCRATCH_DIR/$SNOW_YEAR/single_metric_geotiffs` directory. The metrics currently computed include (in no particular order):
 1. First Snow Day (FSD) of the full snow season (FSS). Also called FSS start day.
 2. Last Snow Day (LSD) of the FSS. Also called FSS end day.
 3. FSS Range: the length (duration) of the full snow season.
@@ -78,18 +89,22 @@ Run this script with a `tile_id` argument to compute snow metrics from the prepr
 8. Total CSS Days: summed duration of all CSS segments
 9. Number of Snow Days: count of all snow-covered days in a snow year
 10. Number of No Snow Days: count of all not snow-covered days in a snow year
+11. Number of Cloud Days: count of all cloud-covered days in a snow year
 
-Execution time is about 10 minutes per tile.
-
+Execution time is about 15 minutes per tile.
 #### Example Usage
 `python compute_snow_metrics.py h11v02`
 
 ### `postprocess.py`
-Run this script with no arguments to postprocess all data in the `single_metric_geotiffs` directory. The script spawns subprocesses that call GDAL routines to reproject GeoTIFFs to ESPG:3338, align grids, and mosaic tiles. Outputs a written to compressed GeoTIFFs. Additional tasks will include stacking individual rasters to a final multiband GeoTIFF.
-
+Run this script with no arguments to postprocess all data in the `single_metric_geotiffs` directory. The script spawns subprocesses that call GDAL routines to reproject GeoTIFFs to ESPG:3338, align grids, and mosaic tiles. Outputs are written to compressed GeoTIFFs. Additional tasks will include stacking individual rasters to a final multiband GeoTIFF.
 #### Example Usage
 `python postprocess.py`
 
 ## Other Modules
 ### `shared_utils.py`
 This module contains convenience and utility functions that are used across multiple other scripts and modules. At the moment these mostly are functions for file input and output.
+
+### `gather_uncertainty_data.py`
+Gather data for downstream uncertainty analyses. This module will construct GeoTIFFs for maximum cloud persistence and also yield rasters that indicate other anomalous values if they occur anywhere in the time series.
+#### Example Usage
+`python gather_uncertainty_data.py h11v02`
