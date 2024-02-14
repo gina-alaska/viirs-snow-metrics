@@ -14,7 +14,6 @@ from luts import (
     snow_cover_threshold,
     inv_cgf_codes,
     css_days_threshold,
-    css_days_break_threshold,
 )
 from shared_utils import (
     open_preprocessed_dataset,
@@ -47,6 +46,7 @@ def apply_threshold(chunked_cgf_snow_cover):
 
     Args:
         chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+
     Returns:
         snow_on (xr.DataArray): boolean values representing snow cover"""
     snow_on = (chunked_cgf_snow_cover > snow_cover_threshold) & (
@@ -124,16 +124,16 @@ def count_snow_days(snow_on):
     return snow_on.sum(dim="time")
 
 
-def count_no_snow_days(chunked_cgf_snow_cover):
+def count_no_snow_days(cgf_snow_darkness_filled):
     """Count the number of snow-free days in a snow season.
 
     Args:
-        darkness_filled (xr.DataArray): darkness-filled cloug-gap filled snow cover
+        cgf_snow_darkness_filled (xr.DataArray): darkness-filled cloud-gap filled snow cover
 
     Returns:
         xr.DataArray: integer values representing the number of no-snow days in the snow season.
     """
-    snow_off_days = chunked_cgf_snow_cover <= snow_cover_threshold
+    snow_off_days = cgf_snow_darkness_filled <= snow_cover_threshold
     return snow_off_days.sum(dim="time")
 
 
@@ -233,6 +233,13 @@ def _continuous_snow_season_metrics(time_series):
 
 
 def compute_css_metrics(snow_on):
+    """Compute metrics related to continuous snow season (CSS) from a time series of snow data.
+
+    Args:
+        snow_on (xr.DataArray): boolean values representing snow cover
+
+    Returns:
+        dict: A dictionary of CSS metrics."""
     css_results = xr.apply_ufunc(
         _continuous_snow_season_metrics,
         snow_on,
@@ -256,6 +263,21 @@ def compute_css_metrics(snow_on):
     )
 
     return css_metric_dict
+
+
+def count_cloud_occurence(chunked_cgf_snow_cover):
+    """Count the per-pixel occurrence of "Cloud" in the snow year.
+
+    Args:
+        chunked_cgf_snow_cover (xarray.Dataset): The chunked dataset.
+
+    Returns:
+        xr.DataArray: count of "Cloud" values".
+    """
+
+    logging.info(f"Counting occurence of `Cloud` values...")
+    cloud_day_count = (chunked_cgf_snow_cover == inv_cgf_codes["Cloud"]).sum(dim="time")
+    return cloud_day_count
 
 
 def apply_mask(mask_fp, array_to_mask):
@@ -307,6 +329,7 @@ if __name__ == "__main__":
     snow_metrics.update({"snow_days": count_snow_days(snow_is_on)})
     snow_metrics.update({"no_snow_days": count_no_snow_days(darkness_filled)})
     snow_metrics.update(compute_css_metrics(snow_is_on))
+    snow_metrics.update({"cloud_days": count_cloud_occurence(darkness_filled)})
 
     # iterate through keys in snow_metrics dict and apply mask
     combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
