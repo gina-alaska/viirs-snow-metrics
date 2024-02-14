@@ -4,7 +4,12 @@ import subprocess
 import logging
 from collections import defaultdict
 
-from config import single_metric_dir, SNOW_YEAR
+from config import (
+    single_metric_dir,
+    reproj_single_metric_dir,
+    reproj_merge_single_metric_dir,
+    SNOW_YEAR,
+)
 
 
 def reproject_to_3338():
@@ -42,7 +47,7 @@ def reproject_to_3338():
                     "-co",
                     "NUM_THREADS=ALL_CPUS",
                     os.path.join(single_metric_dir, file_name),
-                    os.path.join(single_metric_dir, output),
+                    os.path.join(reproj_single_metric_dir, output),
                 ],
                 capture_output=True,
                 text=True,
@@ -52,7 +57,7 @@ def reproject_to_3338():
 
 
 def group_files_by_metric():
-    """Group files in the single_metric_dir by metric.
+    """Group files in the reproj_single_metric_dir by metric.
 
     Returns a dictionary with metric names as keys and lists of file paths as values.
 
@@ -63,11 +68,13 @@ def group_files_by_metric():
 
     metric_groups = defaultdict(list)
 
-    for filename in os.listdir(single_metric_dir):
+    for filename in os.listdir(reproj_single_metric_dir):
         if filename.endswith("3338.tif"):
             # consider parse_metric function in shared utils
             metric = "".join(filename.split("__")[1].split("_")[0:-2])
-            metric_groups[metric].append(os.path.join(single_metric_dir, filename))
+            metric_groups[metric].append(
+                os.path.join(reproj_single_metric_dir, filename)
+            )
 
     return metric_groups
 
@@ -139,7 +146,7 @@ if __name__ == "__main__":
     file_groups = group_files_by_metric()
     for metric, file_list in file_groups.items():
         logging.info(f"Mosaicing {metric}...")
-        dst = single_metric_dir / f"{metric}_merged_{SNOW_YEAR}.tif"
+        dst = reproj_merge_single_metric_dir / f"{metric}_merged_{SNOW_YEAR}.tif"
         merge_geotiffs(file_list, dst)
         logging.info(f"Mosaicing {metric} complete.")
 
