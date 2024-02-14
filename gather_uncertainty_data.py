@@ -3,7 +3,6 @@
 import argparse
 import logging
 
-import numpy as np
 from dask.distributed import Client
 
 from config import SNOW_YEAR, preprocessed_dir, uncertainty_dir
