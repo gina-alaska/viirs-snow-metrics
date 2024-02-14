@@ -288,6 +288,7 @@ def apply_mask(mask_fp, array_to_mask):
         array_to_mask (xr.DataArray): snow metric array to be masked
     Returns:
         xr.DataArray: masked snow metric array, masked values set to 0"""
+
     with rio.open(mask_fp) as src:
         mask_arr = src.read(1)
     mask_applied = mask_arr * array_to_mask
@@ -305,7 +306,6 @@ if __name__ == "__main__":
 
     # A Dask LocalCluster Client speeds this script up 10X
     client = Client()
-
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
 
     chunky_ds = open_preprocessed_dataset(
@@ -319,6 +319,7 @@ if __name__ == "__main__":
     snow_metrics = dict()
     snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
     snow_metrics.update({"last_snow_day": get_last_snow_day_array(snow_is_on)})
+
     snow_metrics.update(
         {
             "fss_range": compute_full_snow_season_range(

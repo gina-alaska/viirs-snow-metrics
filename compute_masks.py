@@ -46,6 +46,7 @@ def generate_ocean_mask(ds_chunked):
     )
     ocean_mask = (
         ds_chunked.where(ds_chunked == inv_cgf_codes["Ocean"]).count(dim="time")
+
         <= n_obs_to_classify_ocean
     )
     return ocean_mask
@@ -70,6 +71,7 @@ def generate_inland_water_mask(ds_chunked):
         ds_chunked.where(ds_chunked == inv_cgf_codes["Lake / Inland water"]).count(
             dim="time"
         )
+
         <= n_obs_to_classify_inland_water
     )
     return inland_water_mask
@@ -109,6 +111,7 @@ if __name__ == "__main__":
     inland_water_mask = generate_inland_water_mask(ds)
     l2_mask = generate_l2fill_mask(ds)
     combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
+
 
     mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0})
     write_tagged_geotiff(
