@@ -39,4 +39,3 @@ snow_cover_threshold = 50
 n_obs_to_classify_ocean = 10
 n_obs_to_classify_inland_water = 10
 css_days_threshold = 14
-css_days_break_threshold = 2
