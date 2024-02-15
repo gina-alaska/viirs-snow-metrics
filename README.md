@@ -1,6 +1,9 @@
 # VIIRS Snow Metrics for Alaska
 
-## Development Setup
+## System Requirements
+Production runs of this code will execute on GINA's "Elephant" machine. Additional testing may occur on SNAP's "Atlas" compute cluster. These are both Linux machines. Other execution environments are not supported. Users will need ample free disk space (order 500 GB) per snow year.
+
+## Setup
 Create the conda environment from the `environment.yml` file if you have not done so already.
 ```sh
 conda env create -f environment.yml
@@ -10,37 +13,52 @@ Activate the environment:
 conda activate viirs-snow
 ```
 
-## System Requirements
-Production runs of this code will occur on GINA's "Elephant" machine. Additional testing may occur on SNAP's "Atlas" compute cluster. These are both Linux machines. Other execution environments are not supported. Users will need ample free disk space (order 500 GB) for a snow year.
-
+### Environment Variables
 Developers and users must set the following environment variables:
-### Directory Structure
+#### Directory Structure
 These variables will be read by the configuration file. If the directories do not exist they will be created for you at runtime.
-##### `INPUT_DIR`
-Set to a path where you will download input data from NSIDC. Anticpate needing around 80 GB free disk space per snow year to download all tiles for the full Alaska spatial domain. Example:
+###### `INPUT_DIR`
+Set to a path where you will download and reference the input data from NSIDC. Anticpate needing around 80 GB free disk space per snow year to download all tiles for the full Alaska spatial domain. Example:
 ```sh
 export INPUT_DIR=/export/datadir/"$USER"_viirs_snow/VIIRS_L3_snow_cover
 ```
-##### `SCRATCH_DIR`
-Set to the path where you will read/write preprocessed data prior to computation of the actual metrics. Something like:
+###### `SCRATCH_DIR`
+Set the path where you will read/write intermediate data. Something like:
 ```sh
 export SCRATCH_DIR=/export/datadir/"$USER"_viirs_snow/scratch
 ```
-##### `OUTPUT_DIR`
+The scratch directory structure will look something like this:
+```
+/export/datadir/$USER_viirs_snow/scratch
+└── $SNOW_YEAR
+    ├── masks
+    ├── preprocessed
+    ├── reprojected_merged_single_metric_geotiffs
+    ├── reprojected_single_metric_geotiffs
+    ├── single_metric_geotiffs
+    └── uncertainty_geotiffs
+```
+###### `OUTPUT_DIR`
 Set to a path where you will write the snow metric outputs to disk. Use a shared disk location so multiple users can examine the output data.
 ```sh
 export OUTPUT_DIR=/export/datadir/"$USER"_viirs_snow/VIIRS_snow_metrics
 ``` 
-### Runtime Options
-##### `SNOW_YEAR`
+#### Runtime Options
+###### `SNOW_YEAR`
 Set the "snow year" to download and process. Snow year 2015 begins August 1, 2015 and ends on July 31, 2016. Leap days are included.
 ```sh
 export SNOW_YEAR=2015
 ``` 
-##### `DEV_MODE` (optional)
+###### `DEV_MODE` (optional)
 Set to True (note this will be passed as a `string` type rather than `bool`) to work on a smaller spatial subset for the purpose of improving development speed. Default is True. Setting to False will trigger a production run over the entire Alaska domain.
 ```sh
 export DEV_MODE=True
+```
+
+###### `MALLOC_TRIM_THRESHOLD_` (optional)
+On occasion Dask worker memory is not released back to the OS. Setting this value to `0` or some other low number will aggressively and automatically trim the memory. This may yield a more stable, though perhaps slower, performance.
+```sh
+export MALLOC_TRIM_THRESHOLD_=0
 ```
 
 ## Usage
@@ -55,20 +73,38 @@ Run this script with a `tile_id` argument to preprocess the downloaded data. The
 `python preprocess.py h11v02`
 
 ### `compute_masks.py`
-Run this script with a `tile_id` argument to create masks from the preproccesed data. This includes water masks with grid cells classified as ocean and as lake or other inland water. Currently the script will create three GeoTIFFs: an ocean mask, a lake / inland water mask, and a combined mask of all grid cells classified as water. Masks will be written to disk as GeoTIFFs to the `$SCRATCH_DIR/$SNOW_YEAR/masks` directory. Execution time is less than 5 minutes per tile. Additional masks may include no data values and areas classified as glaciers or perennial snowfields.
+Run this script with a `tile_id` argument to create masks from the preproccesed data. Currently the script will create four mask GeoTIFFs for the following conditions: ocean, lake / inland water, L2 Fill (i.e., no data), and a combined mask of the previous conditions. Masks will be written to disk as GeoTIFFs to the `$SCRATCH_DIR/$SNOW_YEAR/masks` directory. Execution time is about 2 minutes per tile.
 #### Example Usage
 `python compute_masks.py h11v02`
 
 ### `compute_snow_metrics.py`
-Run this script with a `tile_id` argument to compute snow metrics from the preproccesed data. Outputs will be single-band GeoTIFFs (one per metric per tile) written to the `$SCRATCH_DIR/$SNOW_YEAR/single_metric_geotiffs` directory. The metrics currently computed include:
+Run this script with a `tile_id` argument to compute snow metrics from the preproccesed data. Outputs will be single-band GeoTIFFs (one per metric per tile) written to the `$SCRATCH_DIR/$SNOW_YEAR/single_metric_geotiffs` directory. The metrics currently computed include (in no particular order):
 1. First Snow Day (FSD) of the full snow season (FSS). Also called FSS start day.
 2. Last Snow Day (LSD) of the FSS. Also called FSS end day.
 3. FSS Range: the length (duration) of the full snow season.
+4. Continuous Snow Season (CSS) Start Day: First day of longest CSS segment.
+5. CSS End Day: last day of longest CSS segment.
+6. CSS Range: the length (duration) of the longest CSS segment.
+7. Number of discrete CSS segments.
+8. Total CSS Days: summed duration of all CSS segments
+9. Number of Snow Days: count of all snow-covered days in a snow year
+10. Number of No Snow Days: count of all not snow-covered days in a snow year
+11. Number of Cloud Days: count of all cloud-covered days in a snow year
 
-
+Execution time is about 15 minutes per tile.
 #### Example Usage
 `python compute_snow_metrics.py h11v02`
+
+### `postprocess.py`
+Run this script with no arguments to postprocess all data in the `single_metric_geotiffs` directory. The script spawns subprocesses that call GDAL routines to reproject GeoTIFFs to ESPG:3338, align grids, and mosaic tiles. Outputs are written to compressed GeoTIFFs. Additional tasks will include stacking individual rasters to a final multiband GeoTIFF.
+#### Example Usage
+`python postprocess.py`
 
 ## Other Modules
 ### `shared_utils.py`
 This module contains convenience and utility functions that are used across multiple other scripts and modules. At the moment these mostly are functions for file input and output.
+
+### `gather_uncertainty_data.py`
+Gather data for downstream uncertainty analyses. This module will construct GeoTIFFs for maximum cloud persistence and also yield rasters that indicate other anomalous values if they occur anywhere in the time series.
+#### Example Usage
+`python gather_uncertainty_data.py h11v02`

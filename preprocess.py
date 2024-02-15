@@ -4,14 +4,12 @@ import argparse
 import logging
 import pickle
 from datetime import datetime, timedelta
-from pathlib import Path
 
 import xarray as xr
 import rasterio as rio
-import rioxarray
 import numpy as np
 import pandas as pd
-import dask
+import rioxarray
 import dask.array as da
 
 from config import SNOW_YEAR, preprocessed_dir, snow_year_input_dir
@@ -259,6 +257,7 @@ if __name__ == "__main__":
     tile_id = args.tile_id
 
     logging.info(f"Creating dataset for tile {tile_id}.")
+
     geotiffs = list_input_files(snow_year_input_dir)
     geotiff_di = construct_file_dict(geotiffs)
 
