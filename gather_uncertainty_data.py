@@ -139,7 +139,7 @@ if __name__ == "__main__":
         fp, {"x": "auto", "y": "auto"}, "Cloud_Persistence"
     )
     uncertainty_data.update(
-        {"max cloud persistence": get_max_cloud_persistence(cgf_snow_ds)}
+        {"max_cloud_persistence": get_max_cloud_persistence(cgf_snow_ds)}
     )
     cloud_ds.close()
 
