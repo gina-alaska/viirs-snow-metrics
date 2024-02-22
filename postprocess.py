@@ -5,25 +5,25 @@ import logging
 from collections import defaultdict
 
 from config import (
-    single_metric_dir,
-    reproj_single_metric_dir,
-    reproj_merge_single_metric_dir,
+    tiff_path_dict,
     SNOW_YEAR,
 )
 
 
-def reproject_to_3338():
-    """Reproject all GeoTIFF files in the single_metric_dir to EPSG:3338.
+def reproject_to_3338(target_dir, dst_dir):
+    """Reproject all GeoTIFF files in a target directory to EPSG:3338.
 
     Spawns a `gdalwarp` subprocess with these parameters:
     `gdalwarp -t_srs EPSG:3338 -r nearest -tr 375 375 src.tif dst.tif`
 
-    Args: None
+    Args:
+        target_dir (str): Path to the directory containing the reprojected GeoTIFF files.
+        dst_dir (str): Path to the directory to save the reprojected GeoTIFF files.
 
     Returns: None
     """
 
-    for file_name in os.listdir(single_metric_dir):
+    for file_name in os.listdir(target_dir):
         if file_name.endswith(".tif"):
             base = os.path.basename(file_name)
             name, _ = os.path.splitext(base)
@@ -46,8 +46,8 @@ def reproject_to_3338():
                     "COMPRESS=DEFLATE",
                     "-co",
                     "NUM_THREADS=ALL_CPUS",
-                    os.path.join(single_metric_dir, file_name),
-                    os.path.join(reproj_single_metric_dir, output),
+                    os.path.join(target_dir, file_name),
+                    os.path.join(dst_dir, output),
                 ],
                 capture_output=True,
                 text=True,
@@ -56,27 +56,30 @@ def reproject_to_3338():
             logging.error(log_text.stderr)
 
 
-def group_files_by_metric():
-    """Group files in the reproj_single_metric_dir by metric.
+def group_files_by_metric(target_dir):
+    """Group files in a target directory by metric or variable to prepare them for mosaicking.
 
-    Returns a dictionary with metric names as keys and lists of file paths as values.
+    Returns a dictionary with metric or variable names as keys and lists of file paths as values.
 
-    Args: None
+    Args:
+        target_dir (str): Path to the directory containing the reprojected GeoTIFF files.
 
-    Returns: dict: {metric: [file1, file2, ...]}
+    Returns:
+        dict: {metric: [file1, file2, ...]}
     """
 
-    metric_groups = defaultdict(list)
+    geotiff_groups = defaultdict(list)
 
-    for filename in os.listdir(reproj_single_metric_dir):
+    for filename in os.listdir(target_dir):
         if filename.endswith("3338.tif"):
             # consider parse_metric function in shared utils
-            metric = "".join(filename.split("__")[1].split("_")[0:-2])
-            metric_groups[metric].append(
-                os.path.join(reproj_single_metric_dir, filename)
-            )
+            # tag_to_group = "".join(filename.split("__")[1].split("_")[0:-2])
+            tag_to_group = filename.split("__")[1].rsplit("_", 2)[0]
+            # above line likely to fail for uncertainty or mask files
+            # perhaps the parsing function should be provided as a function to this argument
+            geotiff_groups[tag_to_group].append(os.path.join(target_dir, filename))
 
-    return metric_groups
+    return geotiff_groups
 
 
 def merge_geotiffs(file_list, output_file):
@@ -95,7 +98,7 @@ def merge_geotiffs(file_list, output_file):
     with open(merge_list_file, "w") as f:
         f.write("\n".join(file_list))
 
-    # gdalbuildvrt it
+    # gdalbuildvrt - this is an intermediate file we will throw away
     vrt_file = "output.vrt"
     log_text = subprocess.run(
         [
@@ -140,14 +143,21 @@ def merge_geotiffs(file_list, output_file):
 if __name__ == "__main__":
     logging.basicConfig(filename="postprocess.log", level=logging.INFO)
 
-    logging.info("Reprojecting to EPSG:3338...")
-    reproject_to_3338()
-    logging.info("Reprojection complete.")
-    file_groups = group_files_by_metric()
-    for metric, file_list in file_groups.items():
-        logging.info(f"Mosaicing {metric}...")
-        dst = reproj_merge_single_metric_dir / f"{metric}_merged_{SNOW_YEAR}.tif"
-        merge_geotiffs(file_list, dst)
-        logging.info(f"Mosaicing {metric} complete.")
+    for tiff_flavor in tiff_path_dict.keys():
+        logging.info(f"Reprojecting {tiff_flavor} to EPSG:3338...")
+        reproject_to_3338(
+            tiff_path_dict[tiff_flavor]["creation"],
+            tiff_path_dict[tiff_flavor]["reprojected"],
+        )
+        logging.info("Reprojection complete.")
+
+        file_groups = group_files_by_metric(tiff_path_dict[tiff_flavor]["reprojected"])
+        for tag, file_list in file_groups.items():
+            logging.info(f"Mosaicing {tiff_flavor} {tag}...")
+            dst = (
+                tiff_path_dict[tiff_flavor]["merged"] / f"{tag}_merged_{SNOW_YEAR}.tif"
+            )
+            merge_geotiffs(file_list, dst)
+            logging.info(f"Mosaicing {tiff_flavor} {tag} complete.")
 
     logging.info("Postprocessing complete.")
