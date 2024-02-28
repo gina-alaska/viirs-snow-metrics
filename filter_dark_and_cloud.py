@@ -8,32 +8,50 @@ import numpy as np
 import xarray as xr
 from dask.distributed import Client
 
-from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
+from config import preprocessed_dir, mask_dir, uncertainty_dir, SNOW_YEAR
 from luts import (
-    snow_cover_threshold,
     inv_cgf_codes,
 )
 import compute_snow_metrics as csm
 from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
+    apply_mask,
     write_tagged_geotiff,
 )
 
 
-def is_obscured(chunked_cgf_snow_cover, penumbra_source):
+def is_obscured(chunked_cgf_snow_cover, dark_source):
     """Determine if a grid cell is obscured by a 'dark' condition.
 
-    The 'dark' is a cloud or winter darkness condition. These uncertainty sources will be handled in an identical fashion. Maybe there is a better word than dark (or penumbra???) to describe this condition, but I can't think of it right now.
+    The 'dark' is a cloud or winter darkness condition. These uncertainty sources will be handled in an identical fashion. Maybe there is a better word than dark (penumbra???) to describe this condition, but I can't think of it right now.
 
     Args:
         chunked_cgf_snow_cover (xarray.DataArray): The chunked CGF snow cover data.
-        penumbra_source (str): one of 'Cloud' or 'Night'.
+        dark_source (str): one of 'Cloud' or 'Night'.
     Returns:
         xr.DataArray: Obscured grid cells.
     """
-    dark_on = chunked_cgf_snow_cover == inv_cgf_codes[penumbra_source]
+    dark_on = chunked_cgf_snow_cover == inv_cgf_codes[dark_source]
     return dark_on
+
+
+def count_darkness(chunked_cgf_snow_cover, dark_source):
+    """Count the per-pixel occurrence of polar/winter darkness or cloud cover (in the initialization period) in the snow year.
+
+    Args:
+        ds_chunked (xarray.Dataset): The chunked dataset.
+        dark_source (str): one of 'Cloud' or 'Night'.
+
+    Returns:
+        xarray.DataArray: count of 'Cloud' or 'Night' values.
+    """
+
+    logging.info(f"Counting occurence of `Night` values...")
+    darkness_count = (chunked_cgf_snow_cover == inv_cgf_codes[dark_source]).sum(
+        dim="time"
+    )
+    return darkness_count
 
 
 def get_first_obscured_occurence_index(dark_on):
@@ -180,10 +198,7 @@ def compute_snow_darkness_transitions(chunked_cgf_snow_cover, obscured_source):
 
 
 if __name__ == "__main__":
-    import gc
-
     logging.basicConfig(filename="dark_and_cloud_filter.log", level=logging.INFO)
-
     parser = argparse.ArgumentParser(description="Cloud and Darkness Filtering Script")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     args = parser.parse_args()
@@ -191,35 +206,47 @@ if __name__ == "__main__":
     logging.info(f"Filtering winter darkness and cloud cover for tile {tile_id}.")
 
     client = Client()
-    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
 
+    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     chunky_ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
     )
-
-    filter_data = dict()
-    gc.disable()
+    out_profile = fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0})
+    combined_mask = mask_dir / f"{tile_id}__mask_combined_{SNOW_YEAR}.tif"
     for darkness_source in ["Night"]:  # add "Cloud" back in here
-        # excuse the six-tuple unpacking, but maybe it is easier to read?
-        (
-            snow_did_not_flip,
-            snow_flipped_off_to_on,
-            snow_flipped_on_to_off,
-            dusk,
-            dawn,
-            median_obscured_index,
-        ) = compute_snow_darkness_transitions(chunky_ds, darkness_source)
+        # (
+        #     snow_did_not_flip,
+        #     snow_flipped_off_to_on,
+        #     snow_flipped_on_to_off,
+        #     dusk,
+        #     dawn,
+        #     median_obscured_index,
+        # ) = compute_snow_darkness_transitions(chunky_ds, darkness_source)
+        snow_darkness_transitions = compute_snow_darkness_transitions(
+            chunky_ds, darkness_source
+        )
+        dark_count = count_darkness(chunky_ds, darkness_source)
 
-        filter_data[darkness_source] = {
-            "snow_did_not_flip": snow_did_not_flip,
-            "snow_flipped_off_to_on": snow_flipped_off_to_on,
-            "snow_flipped_on_to_off": snow_flipped_on_to_off,
-            "dusk": dusk,
-            "dawn": dawn,
-            "median_obscured_index": median_obscured_index,
-        }
+        dark_label = darkness_source.lower()
+        tiff_labels = [
+            f"snow_did_not_flip_during_{dark_label}",
+            f"snow_flipped_off_to_on_during_{dark_label}",
+            f"snow_flipped_on_to_off_during_{dark_label}",
+            f"dusk_index_of_last_obs_prior_to_{dark_label}",
+            f"dawn_index_of_last_obs_prior_to_{dark_label}",
+            f"{dark_label}_darkness_count_of_days",
+        ]
+        for label, arr in zip(
+            tiff_labels, list(snow_darkness_transitions) + [dark_count]
+        ):
+            write_tagged_geotiff(
+                uncertainty_dir,
+                tile_id,
+                "",
+                label,
+                out_profile,
+                apply_mask(combined_mask, arr),
+            )
 
-    # write the filter data to disk
-    gc.enable()
     client.close()
-    print("Filtering Script Complete.")
+    print("Cloud and Darkness Filtering Script Complete.")
