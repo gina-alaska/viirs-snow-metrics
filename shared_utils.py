@@ -49,6 +49,22 @@ def fetch_raster_profile(tile_id, updates=None):
     return out_profile
 
 
+def apply_mask(mask_fp, array_to_mask):
+    """Mask out values from an array.
+
+    Args:
+        mask_fp (str): file path to the mask GeoTIFF
+        array_to_mask (xr.DataArray): array to be masked
+    Returns:
+        xr.DataArray: masked array where masked values are set to 0
+    """
+
+    with rio.open(mask_fp) as src:
+        mask_arr = src.read(1)
+    mask_applied = mask_arr * array_to_mask
+    return mask_applied
+
+
 def write_tagged_geotiff(dst_dir, tile_id, tag_name, tag_value, out_profile, arr):
     """Write data to a GeoTIFF file.
 

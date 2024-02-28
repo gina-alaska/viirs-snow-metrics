@@ -18,6 +18,7 @@ from luts import (
 from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
+    apply_mask,
     write_tagged_geotiff,
 )
 
@@ -278,21 +279,6 @@ def count_cloud_occurence(chunked_cgf_snow_cover):
     logging.info(f"Counting occurence of `Cloud` values...")
     cloud_day_count = (chunked_cgf_snow_cover == inv_cgf_codes["Cloud"]).sum(dim="time")
     return cloud_day_count
-
-
-def apply_mask(mask_fp, array_to_mask):
-    """Mask out values from the snow metric array.
-
-    Args:
-        mask_fp (str): file path to the mask GeoTIFF
-        array_to_mask (xr.DataArray): snow metric array to be masked
-    Returns:
-        xr.DataArray: masked snow metric array, masked values set to 0"""
-
-    with rio.open(mask_fp) as src:
-        mask_arr = src.read(1)
-    mask_applied = mask_arr * array_to_mask
-    return mask_applied
 
 
 if __name__ == "__main__":
