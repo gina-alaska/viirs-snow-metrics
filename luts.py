@@ -12,12 +12,11 @@ parameter_sets = {
 }
 
 data_variables = [
-    "Algorithm_Bit_Flags_QA",
     "Basic_QA",
     "CGF_NDSI_Snow_Cover",
     "Cloud_Persistence",
-    "Daily_NDSI_Snow_Cover",
 ]
+# omitting "Daily_NDSI_Snow_Cover" and "Algorithm_Bit_Flags_QA" from the above list because although part of the source data, they are not used in the current implementation
 
 cgf_snow_cover_codes = {
     **{i: "NDSI snow cover valid" for i in range(101)},
