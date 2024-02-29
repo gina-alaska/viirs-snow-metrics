@@ -6,6 +6,7 @@ import pickle
 import xarray as xr
 import rasterio as rio
 
+from luts import snow_cover_threshold
 from config import SNOW_YEAR
 
 
@@ -23,6 +24,22 @@ def open_preprocessed_dataset(fp, chunk_dict, data_variable):
 
     with xr.open_dataset(fp)[data_variable].chunk(chunk_dict) as ds_chunked:
         return ds_chunked
+
+
+def apply_threshold(chunked_cgf_snow_cover):
+    """Apply the snow cover threshold to the CGF snow cover datacube. Grid cells exceeding the threshold value are considered to be snow-covered.
+
+    Note that 100 is the maximum valid snow cover value.
+
+    Args:
+        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+
+    Returns:
+        snow_on (xr.DataArray): boolean values representing snow cover"""
+    snow_on = (chunked_cgf_snow_cover > snow_cover_threshold) & (
+        chunked_cgf_snow_cover <= 100
+    )
+    return snow_on
 
 
 def fetch_raster_profile(tile_id, updates=None):
