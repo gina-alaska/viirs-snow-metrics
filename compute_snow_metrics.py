@@ -18,6 +18,7 @@ from luts import (
 from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
+    apply_threshold,
     apply_mask,
     write_tagged_geotiff,
 )
@@ -38,22 +39,6 @@ def fill_winter_darkness(chunked_cgf_snow_cover):
     )
     chunked_cgf_snow_cover = chunked_cgf_snow_cover.ffill(dim="time")
     return chunked_cgf_snow_cover
-
-
-def apply_threshold(chunked_cgf_snow_cover):
-    """Apply the snow cover threshold to the CGF snow cover datacube. Grid cells exceeding the threshold value are considered to be snow-covered.
-
-    Note that 100 is the maximum valid snow cover value.
-
-    Args:
-        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
-
-    Returns:
-        snow_on (xr.DataArray): boolean values representing snow cover"""
-    snow_on = (chunked_cgf_snow_cover > snow_cover_threshold) & (
-        chunked_cgf_snow_cover <= 100
-    )
-    return snow_on
 
 
 def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
@@ -266,21 +251,6 @@ def compute_css_metrics(snow_on):
     return css_metric_dict
 
 
-def count_cloud_occurence(chunked_cgf_snow_cover):
-    """Count the per-pixel occurrence of "Cloud" in the snow year.
-
-    Args:
-        chunked_cgf_snow_cover (xarray.Dataset): The chunked dataset.
-
-    Returns:
-        xr.DataArray: count of "Cloud" values".
-    """
-
-    logging.info(f"Counting occurence of `Cloud` values...")
-    cloud_day_count = (chunked_cgf_snow_cover == inv_cgf_codes["Cloud"]).sum(dim="time")
-    return cloud_day_count
-
-
 if __name__ == "__main__":
     logging.basicConfig(filename="compute_metrics.log", level=logging.INFO)
 
@@ -316,10 +286,9 @@ if __name__ == "__main__":
     snow_metrics.update({"snow_days": count_snow_days(snow_is_on)})
     snow_metrics.update({"no_snow_days": count_no_snow_days(darkness_filled)})
     snow_metrics.update(compute_css_metrics(snow_is_on))
-    snow_metrics.update({"cloud_days": count_cloud_occurence(darkness_filled)})
 
     # iterate through keys in snow_metrics dict and apply mask
-    combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
+    combined_mask = mask_dir / f"{tile_id}__mask_combined_{SNOW_YEAR}.tif"
     for metric_name, metric_array in snow_metrics.items():
         snow_metrics[metric_name] = apply_mask(combined_mask, metric_array)
 
