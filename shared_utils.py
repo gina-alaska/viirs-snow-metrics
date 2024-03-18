@@ -7,7 +7,7 @@ import xarray as xr
 import rasterio as rio
 
 from luts import snow_cover_threshold
-from config import SNOW_YEAR
+from config import SNOW_YEAR, preprocessed_dir
 
 
 def open_preprocessed_dataset(fp, chunk_dict, data_variable):
@@ -18,12 +18,28 @@ def open_preprocessed_dataset(fp, chunk_dict, data_variable):
         chunk_dict (dict): how to chunk the dataset, like `{"time": 52}`
 
     Returns:
-       xarray.Dataset: The chunked dataset.
+       xr.Dataset: The chunked dataset.
     """
     logging.info(f"Opening preprocessed file {fp} as chunked Dataset...")
 
     with xr.open_dataset(fp)[data_variable].chunk(chunk_dict) as ds_chunked:
         return ds_chunked
+
+
+def write_single_tile_xrdataset(ds, tile, suffix=None):
+    """Write the DataSet to a netCDF file.
+
+    Args:
+       ds (xr.Dataset): The single-tile dataset.
+       tile (str): The tile being processed.
+       suffix (str): An optional suffix to append to the filename.
+    """
+    if suffix is not None:
+        filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}_{suffix}.nc"
+    else:
+        filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}.nc"
+    ds.to_netcdf(filename)
+    logging.info(f"NetCDF dataset for tile {tile} wriiten to {filename}.")
 
 
 def apply_threshold(chunked_cgf_snow_cover):
