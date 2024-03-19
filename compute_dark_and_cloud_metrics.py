@@ -1,4 +1,4 @@
-"""Filtering of winter darkness and cloud cover."""
+"""Script for analyzing CGF snow cover values during periods of winter darkness and cloud cover. This script is required for understanding how snow conditions are impacted by these uncertainty sources. Running this script in a main thread will produce a series of tagged GeoTIFFs that can be used to visualize the results in a GIS application. Otherwise, functionality can be imported and used in the actual snow metric computation to identify and filter CGF snow cover values as necessary. To generate a production dataset it is not required to run this script, though it is necessary for algorithm development."""
 
 import logging
 import argparse
@@ -185,6 +185,12 @@ def get_snow_transition_cases(snow_is_on_at_dusk, snow_is_on_at_dawn):
 
 
     We delay this computation because `np.select` requires boolean arrays. Determine what, if anything, happened to the binary (on or off) snow state between the dusk observation the dawn observation. This information will be used to map different forward and backward data filling strategies for cloud or winter darkness conditions.
+
+    Args:
+        snow_is_on_at_dusk (xr.DataArray): boolean indicating if snow is on at dusk.
+        snow_is_on_at_dawn (xr.DataArray): boolean indicating if snow is on at dawn.
+    Returns:
+        xr.DataArray: integer array indicating the snow transition case during the obscured period. 1 = no change, 2 = snow flipped on, 3 = snow flipped off.
     """
     # no change in snow condition during the obscured period
     # return true when conditions are identical before and after obscured period
@@ -213,7 +219,7 @@ def get_snow_transition_cases(snow_is_on_at_dusk, snow_is_on_at_dawn):
     return snow_transition_cases
 
 
-def create_dark_metric_computation(dark_tag, dark_is_on, chunky_ds):
+def create_dark_metric_computation(dark_tag, dark_is_on, chunky_ds, tag_prefix=None):
     """Create a dictionary of delayed computations for darkness metrics.
 
     This is a look-up-table for how each metric gets computed.
@@ -226,7 +232,8 @@ def create_dark_metric_computation(dark_tag, dark_is_on, chunky_ds):
         dict: A dictionary of delayed computations for darkness metrics."""
 
     dark_metrics = dict()
-
+    if tag_prefix is not None:
+        dark_tag = f"{tag_prefix}_{dark_tag}"
     dark_metrics.update({f"{dark_tag}_obscured_day_count": count_darkness(dark_is_on)})
     dark_metrics.update(
         {
@@ -305,41 +312,64 @@ def write_dark_metric(dark_metric_name, computation_di):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="dark_and_cloud_filter.log", level=logging.INFO)
-    parser = argparse.ArgumentParser(description="Cloud and Darkness Filtering Script")
+    logging.basicConfig(filename="dark_and_cloud_metrics.log", level=logging.INFO)
+    parser = argparse.ArgumentParser(
+        description="Compute metrics for cloud and polar/winter darkness periods."
+    )
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
+    # optional argument to compute metrics for a smoothed dataset
+    parser.add_argument(
+        "--smoothed_input", type=str, help="Suffix of smoothed input file."
+    )
     args = parser.parse_args()
     tile_id = args.tile_id
-    logging.info(f"Filtering winter darkness and cloud cover for tile {tile_id}.")
+    smoothed_input = args.smoothed_input
+    logging.info(
+        f"Computing winter darkness and cloud cover metrics for tile {tile_id}."
+    )
 
     client = Client(memory_limit="64GiB", timeout="60s")  # mem per Dask worker
+
+    if smoothed_input is not None:
+        logging.info(f"Using smoothed input file: {smoothed_input}")
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{smoothed_input}.nc"
+        ds = open_preprocessed_dataset(fp, {"x": "auto", "y": "auto"}).to_dataarray()[0]
+        output_tag = smoothed_input
+    else:
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+        ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        )
+        output_tag = "raw"
+
     # intialize input and output parameters
-    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
-    ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-    )
     out_profile = fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0})
     combined_mask = mask_dir / f"{tile_id}__mask_combined_{SNOW_YEAR}.tif"
 
-    for darkness_source in ["Night"]:  # add "Cloud" back in here
+    for darkness_source in ["Night"]:  # , "Cloud"]:
         tag = darkness_source.lower()
+        di_tag = f"{output_tag}_{darkness_source.lower()}"
+
         darkness_is_on = is_obscured(ds, darkness_source)
-        dark_computation_di = create_dark_metric_computation(tag, darkness_is_on, ds)
+        dark_computation_di = create_dark_metric_computation(
+            tag, darkness_is_on, ds, output_tag
+        )
 
         # these are relatively rapid computes
-        # write_dark_metric(f"{tag}_obscured_day_count", dark_computation_di)
-        # write_dark_metric(f"dusk_index_of_last_obs_prior_to_{tag}", dark_computation_di)
-        # write_dark_metric(f"dawn_index_of_first_obs_after_{tag}", dark_computation_di)
-        # write_dark_metric(f"median_index_of_{tag}_period", dark_computation_di)
-        # more memory intensive because they rely on computing the above indices
-        # write_dark_metric(f"value_at_{tag}_dusk", dark_computation_di)
-        # write_dark_metric(f"value_at_{tag}_dawn", dark_computation_di)
-        # write_dark_metric(f"snow_is_on_at_{tag}_dusk", dark_computation_di)
-        # write_dark_metric(f"snow_is_on_at_{tag}_dawn", dark_computation_di)
-        write_dark_metric(f"snow_transition_cases_{tag}", dark_computation_di)
-    client.close()
-    print("Cloud and Darkness Filtering Script Complete.")
+        write_dark_metric(f"{di_tag}_obscured_day_count", dark_computation_di)
+        write_dark_metric(
+            f"dusk_index_of_last_obs_prior_to_{di_tag}", dark_computation_di
+        )
+        write_dark_metric(
+            f"dawn_index_of_first_obs_after_{di_tag}", dark_computation_di
+        )
+        write_dark_metric(f"median_index_of_{di_tag}_period", dark_computation_di)
+        # # more memory intensive because they rely on computing the above indices
+        write_dark_metric(f"value_at_{di_tag}_dusk", dark_computation_di)
+        write_dark_metric(f"value_at_{di_tag}_dawn", dark_computation_di)
+        write_dark_metric(f"snow_is_on_at_{di_tag}_dusk", dark_computation_di)
+        write_dark_metric(f"snow_is_on_at_{di_tag}_dawn", dark_computation_di)
+        write_dark_metric(f"snow_transition_cases_{di_tag}", dark_computation_di)
 
-#     f"snow_did_not_flip_during_{dark_label}",
-#     f"snow_flipped_off_to_on_during_{dark_label}",
-#     f"snow_flipped_on_to_off_during_{dark_label}",
+    client.close()
+    print("Computation of cloud and darkness metrics complete.")

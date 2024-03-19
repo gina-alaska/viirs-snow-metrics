@@ -10,7 +10,7 @@ from luts import snow_cover_threshold
 from config import SNOW_YEAR, preprocessed_dir
 
 
-def open_preprocessed_dataset(fp, chunk_dict, data_variable):
+def open_preprocessed_dataset(fp, chunk_dict, data_variable=None):
     """Open a preprocessed dataset for a given tile.
 
     Args:
@@ -21,9 +21,12 @@ def open_preprocessed_dataset(fp, chunk_dict, data_variable):
        xr.Dataset: The chunked dataset.
     """
     logging.info(f"Opening preprocessed file {fp} as chunked Dataset...")
-
-    with xr.open_dataset(fp)[data_variable].chunk(chunk_dict) as ds_chunked:
-        return ds_chunked
+    if data_variable is not None:
+        with xr.open_dataset(fp)[data_variable].chunk(chunk_dict) as ds_chunked:
+            return ds_chunked
+    else:
+        with xr.open_dataset(fp).chunk(chunk_dict) as ds_chunked:
+            return ds_chunked
 
 
 def write_single_tile_xrdataset(ds, tile, suffix=None):
