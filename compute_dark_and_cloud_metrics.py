@@ -366,7 +366,7 @@ if __name__ == "__main__":
             f"dawn_index_of_first_obs_after_{di_tag}", dark_computation_di
         )
         write_dark_metric(f"median_index_of_{di_tag}_period", dark_computation_di)
-        # # more memory intensive because they rely on computing the above indices
+        # more memory intensive because they rely on computing the above indices
         write_dark_metric(f"value_at_{di_tag}_dusk", dark_computation_di)
         write_dark_metric(f"value_at_{di_tag}_dawn", dark_computation_di)
         write_dark_metric(f"snow_is_on_at_{di_tag}_dusk", dark_computation_di)
@@ -374,4 +374,5 @@ if __name__ == "__main__":
         write_dark_metric(f"snow_transition_cases_{di_tag}", dark_computation_di)
 
     client.close()
+    ds.close()
     print("Computation of cloud and darkness metrics complete.")

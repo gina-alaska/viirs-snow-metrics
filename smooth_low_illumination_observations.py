@@ -1,7 +1,8 @@
-"""Script for smoothing CGF snow cover values during periods of winter darkness and cloud cover. This script is required for understanding how snow conditions are impacted by these uncertainty sources. Running this script in a main thread will produce a netCDF dataset of smoothed snow cover data."""
+"""Script for smoothing CGF snow cover values during periods of low illumination. Running this script in a main thread will produce a netCDF dataset of smoothed snow cover data."""
 
 import logging
 import argparse
+import os
 
 import numpy as np
 import xarray as xr
@@ -10,7 +11,6 @@ from scipy.signal import savgol_filter
 from dask.distributed import Client
 
 from config import preprocessed_dir, SNOW_YEAR
-from luts import inv_cgf_codes
 from shared_utils import open_preprocessed_dataset, write_single_tile_xrdataset
 
 
@@ -121,9 +121,8 @@ def apply_smoothing_of_low_illumination_observations(
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        filename="smooth_low_illumination_observations.log", level=logging.INFO
-    )
+    log_file_path = os.path.join(os.path.expanduser('~'), 'dark_and_cloud_metrics.log')
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Script to create smoothed snow cover data for low illumination conditions."
     )
