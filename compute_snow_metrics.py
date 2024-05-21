@@ -3,6 +3,7 @@
 import logging
 import argparse
 import calendar
+import os
 
 import rasterio as rio
 import numpy as np
@@ -252,7 +253,8 @@ def compute_css_metrics(snow_on):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="compute_metrics.log", level=logging.INFO)
+    log_file_path = os.path.join(os.path.expanduser('~'), 'snow_metric_computation.log')
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
 
     parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
@@ -261,7 +263,7 @@ if __name__ == "__main__":
     logging.info(f"Computing snow metrics for tile {tile_id}.")
 
     # A Dask LocalCluster Client speeds this script up 10X
-    client = Client()
+    client = Client(n_workers=9)
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
 
     chunky_ds = open_preprocessed_dataset(
@@ -271,6 +273,8 @@ if __name__ == "__main__":
     logging.info(f"Filling 'Night' Grid Cells...")
     darkness_filled = fill_winter_darkness(chunky_ds)
     logging.info(f"Applying Snow Cover Threshold...")
+    # may need a switch here, like if naive do this function,
+    # else do the more sophisticated filtering function
     snow_is_on = apply_threshold(darkness_filled)
     snow_metrics = dict()
     snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
@@ -306,4 +310,5 @@ if __name__ == "__main__":
             # we don't actually have to call .compute(), but this communicates a chunked DataArray input and there is no performance penalty vs. just calling .values
         )
     client.close()
+    chunky_ds.close()
     print("Snow Metric Computation Script Complete.")

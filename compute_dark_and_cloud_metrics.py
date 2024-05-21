@@ -1,7 +1,8 @@
-"""Script for analyzing CGF snow cover values during periods of winter darkness and cloud cover. This script is required for understanding how snow conditions are impacted by these uncertainty sources. Running this script in a main thread will produce a series of tagged GeoTIFFs that can be used to visualize the results in a GIS application. Otherwise, functionality can be imported and used in the actual snow metric computation to identify and filter CGF snow cover values as necessary. To generate a production dataset it is not required to run this script, though it is necessary for algorithm development."""
+"""Script for analyzing CGF snow cover values during periods of winter darkness and cloud cover. This script is required for understanding how snow conditions are impacted by these uncertainty sources. Running this script in a main thread will produce a series of tagged GeoTIFFs that can be used to visualize the results in a GIS application. Otherwise, functionality can be imported and used in the actual snow metric computation to identify and filter CGF snow cover values as necessary."""
 
 import logging
 import argparse
+import os
 
 import numpy as np
 import xarray as xr
@@ -312,7 +313,8 @@ def write_dark_metric(dark_metric_name, computation_di):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="dark_and_cloud_metrics.log", level=logging.INFO)
+    log_file_path = os.path.join(os.path.expanduser('~'), 'dark_and_cloud_metrics.log')
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Compute metrics for cloud and polar/winter darkness periods."
     )

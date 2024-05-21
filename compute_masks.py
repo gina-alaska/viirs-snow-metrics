@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import os
 
 import numpy as np
 from dask.distributed import Client
@@ -92,14 +93,15 @@ def combine_masks(mask_list):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="mask.log", level=logging.INFO)
-
+    log_file_path = os.path.join(os.path.expanduser('~'), 'mask_computation.log')
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+    
     parser = argparse.ArgumentParser(description="Script to Generate Masks")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     args = parser.parse_args()
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
-    client = Client()
+    client = Client(n_workers=36)
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
@@ -133,5 +135,6 @@ if __name__ == "__main__":
     write_tagged_geotiff(
         mask_dir, tile_id, "_mask", "combined", mask_profile, combined_mask
     )
+    ds.close()
     client.close()
     print("Mask Generation Script Complete.")

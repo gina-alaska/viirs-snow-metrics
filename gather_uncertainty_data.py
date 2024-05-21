@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import os
 
 from dask.distributed import Client
 
@@ -23,7 +24,6 @@ def count_no_decision_occurence(ds_chunked):
     Returns:
         xarray.DataArray: count of "No decision" values".
     """
-
     logging.info(f"Counting occurence of `No decision` values...")
     no_decision_count = (ds_chunked == inv_cgf_codes["No decision"]).sum(dim="time")
     return no_decision_count
@@ -38,7 +38,6 @@ def count_missing_l1b_occurence(ds_chunked):
     Returns:
         xarray.DataArray: count of "Missing L1B data" values".
     """
-
     logging.info(f"Counting occurence of `Missing L1B data` values...")
     missing_l1b_count = (ds_chunked == inv_cgf_codes["Missing L1B data"]).sum(
         dim="time"
@@ -55,7 +54,6 @@ def count_l1b_calibration_fail(ds_chunked):
     Returns:
         xarray.DataArray: count of "L1B data failed calibration" values".
     """
-
     logging.info(f"Counting occurence of `L1B data failed calibration` values...")
     l1b_fail_count = (ds_chunked == inv_cgf_codes["L1B data failed calibration"]).sum(
         dim="time"
@@ -72,7 +70,6 @@ def count_bowtie_trim(ds_chunked):
     Returns:
         xarray.DataArray: count of "Onboard VIIRS bowtie trim" values".
     """
-
     logging.info(f"Counting occurence of `Onboard VIIRS bowtie trim` values...")
     bowtie_trim_count = (ds_chunked == inv_cgf_codes["Onboard VIIRS bowtie trim"]).sum(
         dim="time"
@@ -89,14 +86,14 @@ def get_max_cloud_persistence(ds_chunked):
     Returns:
         xarray.DataArray: max cloud persistence value".
     """
-
     logging.info(f"Finding maximum cloud persistence value...")
     max_cloud_persist = ds_chunked.max(dim="time")
     return max_cloud_persist
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="gather_uncertainty.log", level=logging.INFO)
+    log_file_path = os.path.join(os.path.expanduser('~'), 'source_data_uncertainty.log')
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Script to Fetch Data For Uncertainty Analysis"
     )
