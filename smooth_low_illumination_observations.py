@@ -121,7 +121,7 @@ def apply_smoothing_of_low_illumination_observations(
 
 
 if __name__ == "__main__":
-    log_file_path = os.path.join(os.path.expanduser('~'), 'dark_and_cloud_metrics.log')
+    log_file_path = os.path.join(os.path.expanduser("~"), "dark_and_cloud_metrics.log")
     logging.basicConfig(filename=log_file_path, level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Script to create smoothed snow cover data for low illumination conditions."
@@ -132,7 +132,6 @@ if __name__ == "__main__":
         type=int,
         help="Size of window to use to smooth low illumination observations. Must be an odd integer.",
     )
-
     args = parser.parse_args()
     assert (
         args.smoothing_window_size % 2 != 0

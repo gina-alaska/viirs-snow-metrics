@@ -93,9 +93,9 @@ def combine_masks(mask_list):
 
 
 if __name__ == "__main__":
-    log_file_path = os.path.join(os.path.expanduser('~'), 'mask_computation.log')
+    log_file_path = os.path.join(os.path.expanduser("~"), "mask_computation.log")
     logging.basicConfig(filename=log_file_path, level=logging.INFO)
-    
+
     parser = argparse.ArgumentParser(description="Script to Generate Masks")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     args = parser.parse_args()
