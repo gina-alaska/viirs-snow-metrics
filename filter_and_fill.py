@@ -103,7 +103,7 @@ def fill_obscured_values_with_adjacent_observations(snow_data, sections_to_fill)
         last_valid_before = snow_data[section.start - 1]
 
         # get first valid observation after obscured period is over
-        first_valid_after = snow_data[section.stop + 1]
+        first_valid_after = snow_data[section.stop]
 
         # get median index (halfway point) of the obscured period
         halfway_point = (section.start + section.stop) // 2
@@ -134,7 +134,7 @@ def construct_result(original_data, modified_data, mask):
 
 
 def apply_filter_and_fill_to_masked_sections(
-    snow_data, mask_data, window_length=3, polyorder=1
+    snow_data, mask_data, window_length=5, polyorder=1
 ):
     def filter_section(data, filter_mask):
         sections_to_filter = identify_sections(filter_mask)
@@ -148,6 +148,7 @@ def apply_filter_and_fill_to_masked_sections(
         )
         return construct_result(data, filled_data, obscured_mask)
 
+    snow_data_dtype = snow_data.dtype
     # first pass the Savitzky-Golay filter over the low illumination observations
     filtered_snow_data = xr.apply_ufunc(
         filter_section,
@@ -157,7 +158,7 @@ def apply_filter_and_fill_to_masked_sections(
         output_core_dims=[["time"]],
         vectorize=True,
         dask="parallelized",
-        output_dtypes=[np.int8],
+        output_dtypes=[snow_data_dtype],
     )
 
     # next forward/backward fill the night period
@@ -169,7 +170,7 @@ def apply_filter_and_fill_to_masked_sections(
         output_core_dims=[["time"]],
         vectorize=True,
         dask="parallelized",
-        output_dtypes=[np.int8],
+        output_dtypes=[snow_data_dtype],
     )
 
     # finally, forward/backward fill the cloud period
@@ -181,7 +182,7 @@ def apply_filter_and_fill_to_masked_sections(
         output_core_dims=[["time"]],
         vectorize=True,
         dask="parallelized",
-        output_dtypes=[np.int8],
+        output_dtypes=[snow_data_dtype],
     )
     return cloud_filled_snow_data
 
