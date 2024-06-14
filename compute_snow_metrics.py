@@ -10,7 +10,13 @@ import numpy as np
 import xarray as xr
 from dask.distributed import Client
 
-from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
+from config import (
+    preprocessed_dir,
+    mask_dir,
+    single_metric_dir,
+    SNOW_YEAR,
+    uncertainty_dir,
+)
 from luts import (
     snow_cover_threshold,
     inv_cgf_codes,
@@ -25,7 +31,7 @@ from shared_utils import (
 )
 
 
-def fill_winter_darkness(chunked_cgf_snow_cover):
+def naive_fill_winter_darkness(chunked_cgf_snow_cover):
     """
     Fill grid cells classified as "Night" (i.e. polar / winter darkness) with the snow cover value from the most recent previous day with valid data.
 
@@ -39,6 +45,41 @@ def fill_winter_darkness(chunked_cgf_snow_cover):
         chunked_cgf_snow_cover != inv_cgf_codes["Night"], np.nan
     )
     chunked_cgf_snow_cover = chunked_cgf_snow_cover.ffill(dim="time")
+    return chunked_cgf_snow_cover
+
+
+def median_index_fill_winter_darkness(
+    chunked_cgf_snow_cover, median_index_fp, dusk_index_fp, dawn_index_fp
+):
+    """
+    Fill grid cells classified as "Night" (i.e. polar / winter darkness) with the snow cover value from the most recent previous day with valid data up until the median time index of the darkness obscured period. Fill backwards from the "dawn" observation to the median index.
+
+    Args:
+        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+
+    Returns:
+        xr.DataArray: snow cover datacube with winter darkness filled
+    """
+    # replace "night" values with np.nan
+    chunked_cgf_snow_cover = chunked_cgf_snow_cover.where(
+        chunked_cgf_snow_cover != inv_cgf_codes["Night"], np.nan
+    )
+    # open the median index GeoTIFF to get the median index
+    with rio.open_src(median_index_fp) as src:
+        median_index = src.read(1)
+    # open the median index GeoTIFF to get the median index
+    with rio.open_src(dusk_index_fp) as src:
+        dusk_index = src.read(1)
+    with rio.open_src(dawn_index_fp) as src:
+        dawn_index = src.read(1)
+    # replace the nan values between the dusk index and the median index with the snow cover value from the most recent previous day with valid data
+    chunked_cgf_snow_cover = chunked_cgf_snow_cover.where(
+        (chunked_cgf_snow_cover.time < median_index)
+        | (chunked_cgf_snow_cover.time > dusk_index),
+        np.nan,
+    )
+    # replace the nan values between median_index + 1 and the dawn index with the snow observation from the day immediately after the dawn index. basically this is
+    # chunked_cgf_snow_cover = chunked_cgf_snow_cover.ffill(dim="time")
     return chunked_cgf_snow_cover
 
 
@@ -253,28 +294,38 @@ def compute_css_metrics(snow_on):
 
 
 if __name__ == "__main__":
-    log_file_path = os.path.join(os.path.expanduser('~'), 'snow_metric_computation.log')
+    log_file_path = os.path.join(os.path.expanduser("~"), "snow_metric_computation.log")
     logging.basicConfig(filename=log_file_path, level=logging.INFO)
-
     parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument(
+        "--smoothed_input", type=str, help="Suffix of smoothed input file."
+    )
     args = parser.parse_args()
     tile_id = args.tile_id
     logging.info(f"Computing snow metrics for tile {tile_id}.")
 
     # A Dask LocalCluster Client speeds this script up 10X
     client = Client(n_workers=9)
-    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+    if args.smoothed_input is not None:
+        smoothed_input = args.smoothed_input
+        logging.info(f"Using smoothed input file: {smoothed_input}")
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{smoothed_input}.nc"
+        chunky_ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        )
+        output_tag = smoothed_input
+        # do a more sophisticated filtering function based on median index and such
+        # darkness_filled = ...
+    else:
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+        chunky_ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        )
+        logging.info(f"Filling 'Night' Grid Cells with naive forward filling...")
+        darkness_filled = naive_fill_winter_darkness(chunky_ds)
 
-    chunky_ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-    )
-
-    logging.info(f"Filling 'Night' Grid Cells...")
-    darkness_filled = fill_winter_darkness(chunky_ds)
     logging.info(f"Applying Snow Cover Threshold...")
-    # may need a switch here, like if naive do this function,
-    # else do the more sophisticated filtering function
     snow_is_on = apply_threshold(darkness_filled)
     snow_metrics = dict()
     snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
