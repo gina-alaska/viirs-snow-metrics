@@ -72,10 +72,10 @@ Run this script with a `tile_id` argument to preprocess the downloaded data. The
 ##### Example Usage
 `python preprocess.py h11v02`
 
-#### `smooth_low_illumination_observations.py`
-Apply a Savitzky-Golay filter to low illumination observations (solar zenith angles < 70 degrees) and write a new netCDF dataset containing the smoothed output. There are two arguments: the VIIRS Tile ID and the size of the smoothing window. The window size must be an odd integer. Execution time depends on how many of these low illumination observations there are - but the filtering is computationally intensive. Execution time can range between 15 and 45 minutes per tile.
+#### `filter_and_fill.py`
+Apply a Savitzky-Golay filter to low illumination observations (solar zenith angles < 70 degrees), fill in observation gaps caused by night and cloud conditions, and write a new netCDF dataset containing the output. There are two arguments: the VIIRS Tile ID and the suffix to tag the output file name with. Execution time can range between 15 and 45 minutes per tile.
 ##### Example Usage
-`python smooth_low_illumination_observations.py h11v02 7`
+`python smooth_low_illumination_observations.py h11v02 filtered_filled`
 
 #### `compute_masks.py`
 Run this script with a `tile_id` argument to create masks from the preproccesed data. Currently the script will create four mask GeoTIFFs for the following conditions: ocean, lake / inland water, L2 Fill (i.e., no data), and a combined mask of the previous conditions. Masks will be written to disk as GeoTIFFs to the `$SCRATCH_DIR/$SNOW_YEAR/masks` directory. Execution time is about 2 minutes per tile.
