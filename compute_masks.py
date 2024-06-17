@@ -101,7 +101,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
-    client = Client(n_workers=36)
+    client = Client(n_workers=24)
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
