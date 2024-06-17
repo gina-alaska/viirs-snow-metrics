@@ -72,20 +72,7 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 metrics_dir = Path(os.getenv("OUTPUT_DIR")).joinpath("viirs_snow_metrics")
 metrics_dir.mkdir(exist_ok=True)
 
-# Configure development vs. production runtimes, default to dev
-if os.getenv("DEV_MODE") is None:
-    DEV_MODE = True
-elif os.getenv("DEV_MODE").lower() == "false":
-    DEV_MODE = False
-else:
-    DEV_MODE = True
-
-if not DEV_MODE:
-    viirs_params = parameter_sets["prod_params"]
-    print("Operating in production mode with the following parameters:")
-    print(viirs_params)
-else:
-    viirs_params = parameter_sets["dev_params"]
+viirs_params = parameter_sets["prod_params"]
 
 # Nested dict of directories keyed by GeoTIFFs flavor
 # top level key is the flavor
