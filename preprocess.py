@@ -15,34 +15,7 @@ import dask.array as da
 
 from config import snow_year_input_dir
 from luts import data_variables
-from shared_utils import write_single_tile_xrdataset
-
-
-def list_input_files(src_dir):
-    """List all .tif files in the source directory.
-
-    Args:
-       src_dir (Path): The source directory containing the .tif files.
-
-    Returns:
-       list: A list of all .tif files in the source directory.
-    """
-    fps = [x for x in src_dir.glob("*.tif")]
-    logging.info(f"Downloaded file count is {len(fps)}.")
-    logging.info(f"Files that will be included in dataset: {fps}.")
-    return fps
-
-
-def parse_tile(fp):
-    """Parse the tile from the filename.
-
-    Args:
-       fp (Path): The file path object.
-
-    Returns:
-       str: The tile extracted from the filename.
-    """
-    return fp.name.split("_")[2]
+from shared_utils import parse_tile, list_input_files, write_single_tile_xrdataset
 
 
 def parse_date(fp):
@@ -247,11 +220,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
     tile_id = args.tile_id
 
-    logging.info(f"Creating dataset for tile {tile_id}.")
+    logging.info(f"Creating preprocessed dataset for tile {tile_id}...")
 
     geotiffs = list_input_files(snow_year_input_dir)
     geotiff_di = construct_file_dict(geotiffs)
-
     tile_ds = create_single_tile_dataset(geotiff_di, tile_id)
     write_single_tile_xrdataset(tile_ds, tile_id)
+
+    logging.info(f"Creating preprocessed dataset for tile {tile_id} complete.")
     print("Preprocessing Script Complete.")

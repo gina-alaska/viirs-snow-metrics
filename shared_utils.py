@@ -1,5 +1,4 @@
 """Utility functions used across multiple modules."""
-
 import logging
 import pickle
 
@@ -8,6 +7,33 @@ import rasterio as rio
 
 from luts import snow_cover_threshold
 from config import SNOW_YEAR, preprocessed_dir
+
+
+def list_input_files(src_dir):
+    """List all .tif files in the source directory.
+
+    Args:
+       src_dir (Path): The source directory containing the .tif files.
+
+    Returns:
+       list: A list of all .tif files in the source directory.
+    """
+    fps = [x for x in src_dir.glob("*.tif")]
+    logging.info(f"Downloaded file count is {len(fps)}.")
+    logging.info(f"Files that will be included in dataset: {fps}.")
+    return fps
+
+
+def parse_tile(fp):
+    """Parse the VIIRS tile ID from the filename.
+
+    Args:
+       fp (Path): The file path object.
+
+    Returns:
+       str: The tile ID (e.g., h11v02) extracted from the filename.
+    """
+    return fp.name.split("_")[2]
 
 
 def open_preprocessed_dataset(fp, chunk_dict, data_variable=None):
