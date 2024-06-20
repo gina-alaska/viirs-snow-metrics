@@ -344,7 +344,7 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         # Continue loop while request is still processing
         while status == "pending" or status == "processing":
             logging.info("Status is not complete. Trying again.")
-            time.sleep(300)  # emit status every 5 min
+            time.sleep(3600)  # emit status every hour
             loop_response = session.get(statusURL)
             loop_response.raise_for_status()
             loop_root = ET.fromstring(loop_response.content)
@@ -389,7 +389,15 @@ def download_order(session, download_urls, dl_path):
     for dl_url in download_urls:
         logging.info("Beginning download of zipped output...")
         zip_response = session.get(dl_url)
-        zip_response.raise_for_status()
+        try:
+            for _ in range(3):
+                zip_response = session.get(dl_url)
+                if zip_response.status_code == 200:
+                    break
+                time.sleep(120)  # Pause for 2 minutes
+            zip_response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            print(f"Error downloading zip file: {e}")
         with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
             z.extractall(dl_path)
     logging.info("Data request is complete.")
@@ -438,7 +446,8 @@ def validate_download(dl_path, number_granules_requested):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="download.log", level=logging.INFO)
+    log_file_path = os.path.join(os.path.expanduser("~"), "input_data_download.log")
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
 
     wipe_old_downloads(snow_year_input_dir)
 
@@ -475,7 +484,6 @@ if __name__ == "__main__":
 
         dl_urls = make_async_data_orders(page_num, api_session, dl_params)
         download_order(api_session, dl_urls, snow_year_input_dir)
-
         flatten_download_directory(snow_year_input_dir)
         validate_download(snow_year_input_dir, len(granule_list))
 
