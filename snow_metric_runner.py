@@ -1,13 +1,15 @@
-"""This script is used to run the snow metrics for a single snow year for all available tiles."""
+"""Script to run snow metrics for a single snow year for all available tiles."""
 
 import os
+import subprocess
+import argparse
 
 from config import snow_year_input_dir
 from shared_utils import list_input_files, parse_tile
 
 
 def trigger_download():
-    os.system("python download.py")
+    os.system("python ./download.py")
     print("Download complete.")
 
 
@@ -19,51 +21,103 @@ def get_unique_tiles_in_input_directory():
     """
     fps = list_input_files(snow_year_input_dir)
     tiles_to_process = set([parse_tile(fp) for fp in fps])
-    return tiles_to_process
+    return list(tiles_to_process)
 
 
 def trigger_preprocess(tile_id):
-    os.system("python preprocess.py --tile_id " + tile_id)
+    result = subprocess.check_output(["python", "./preprocess.py", tile_id])
+    print(result)
     print("Preprocessing complete.")
 
 
 def trigger_filter_fill(tile_id):
-    os.system("python filter_fill.py --tile_id " + tile_id)
+    try:
+        result = subprocess.check_output(
+            ["python", "./filter_and_fill.py", tile_id], stderr=subprocess.STDOUT
+        )
+        print(result)
+    except subprocess.CalledProcessError as e:
+        print("Error occurred:", e.output.decode())
     print("Filter and fill complete.")
 
 
 def trigger_compute_masks(tile_id):
-    os.system("python compute_masks.py --tile_id " + tile_id)
+    try:
+        result = subprocess.check_output(
+            ["python", "./compute_masks.py", tile_id], stderr=subprocess.STDOUT
+        )
+        print(result)
+    except subprocess.CalledProcessError as e:
+        print("Error occurred:", e.output.decode())
     print("Mask computation complete.")
 
 
 def trigger_compute_snow_metrics(tile_id):
-    os.system("python compute_snow_metrics.py --tile_id " + tile_id)
+    try:
+        result = subprocess.check_output(
+            ["python", "./compute_snow_metrics.py", tile_id], stderr=subprocess.STDOUT
+        )
+        print(result)
+    except subprocess.CalledProcessError as e:
+        print("Error occurred:", e.output.decode())
     print("Snow metrics computation complete.")
 
 
 def trigger_postprocess():
-    os.system("python postprocess.py")
+    try:
+        result = subprocess.check_output(
+            ["python", "./postprocess.py"], stderr=subprocess.STDOUT
+        )
+        print(result)
+    except subprocess.CalledProcessError as e:
+        print("Error occurred:", e.output.decode())
     print("Postprocessing complete.")
 
 
 if __name__ == "__main__":
-    # download data by calling the download.py script
-    trigger_download()
+    parser = argparse.ArgumentParser(
+        description="Run snow metrics for a single snow year for all available tiles."
+    )
+    parser.add_argument("--download", action="store_true", help="Trigger data download")
+    parser.add_argument(
+        "--preprocess", action="store_true", help="Trigger data preprocessing"
+    )
+    parser.add_argument(
+        "--filter_fill", action="store_true", help="Trigger filter and fill"
+    )
+    parser.add_argument(
+        "--compute_masks", action="store_true", help="Trigger mask computation"
+    )
+    parser.add_argument(
+        "--compute_metrics",
+        action="store_true",
+        help="Trigger snow metrics computation",
+    )
+    parser.add_argument(
+        "--postprocess", action="store_true", help="Trigger postprocessing"
+    )
+
+    args = parser.parse_args()
+
+    if args.download:
+        trigger_download()
 
     tile_ids = get_unique_tiles_in_input_directory()
-    for tile_id in tile_ids:
-        # preprocess data
-        trigger_preprocess(tile_id)
+    for tile_id in tile_ids[0:1]:
+        print(tile_id)
+        if args.preprocess:
+            trigger_preprocess(tile_id)
 
-        # filter and fill data
-        trigger_filter_fill(tile_id)
+        if args.filter_fill:
+            trigger_filter_fill(tile_id)
 
-        # compute masks
-        trigger_compute_masks(tile_id)
+        if args.compute_masks:
+            trigger_compute_masks(tile_id)
 
-        # compute snow metrics
-        trigger_compute_snow_metrics(tile_id)
+        if args.compute_metrics:
+            trigger_compute_snow_metrics(tile_id)
 
-    # postprocess all tiles
-    trigger_postprocess()
+    if args.postprocess:
+        trigger_postprocess()
+
+    print("All tasks complete.")
