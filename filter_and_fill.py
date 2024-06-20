@@ -54,7 +54,7 @@ def identify_sections(mask):
     """
     true_indices = np.flatnonzero(mask)
     if true_indices.size == 0:
-        return [] # avoid IndexError later on
+        return []  # avoid IndexError later on
     split_points = np.where(np.diff(true_indices) != 1)[0] + 1
     split_indices = np.concatenate([[0], split_points, [true_indices.size]])
     return [

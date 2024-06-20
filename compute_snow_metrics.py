@@ -246,7 +246,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     parser.add_argument(
-        "--alt_input", type=str, help="Alternate input file indicated by filename suffix."
+        "--alt_input",
+        type=str,
+        help="Alternate input file indicated by filename suffix.",
     )
     args = parser.parse_args()
     tile_id = args.tile_id
@@ -268,7 +270,6 @@ if __name__ == "__main__":
         chunky_ds = open_preprocessed_dataset(
             fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
         )
-
 
     logging.info(f"Applying Snow Cover Threshold...")
     snow_is_on = apply_threshold(chunky_ds)
@@ -303,7 +304,7 @@ if __name__ == "__main__":
             metric_name,
             single_metric_profile,
             metric_array.compute().values.astype("int16"),
-            # don't have to call .compute(), but communicates a chunked DataArray input 
+            # don't have to call .compute(), but communicates a chunked DataArray input
         )
     client.close()
     chunky_ds.close()
