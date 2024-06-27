@@ -103,7 +103,7 @@ if __name__ == "__main__":
         trigger_download()
 
     tile_ids = get_unique_tiles_in_input_directory()
-    for tile_id in tile_ids[0:1]:
+    for tile_id in tile_ids:
         print(tile_id)
         if args.preprocess:
             trigger_preprocess(tile_id)
