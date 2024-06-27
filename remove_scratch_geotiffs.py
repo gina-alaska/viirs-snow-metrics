@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 from config import snow_year_scratch_dir
 
 geotiff_files = list(snow_year_scratch_dir.rglob("*.tif"))
