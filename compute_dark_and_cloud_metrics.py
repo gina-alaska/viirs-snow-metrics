@@ -301,6 +301,15 @@ def create_dark_metric_computation(dark_tag, dark_is_on, chunky_ds, tag_prefix=N
 
 
 def write_dark_metric(dark_metric_name, computation_di):
+    """Trigger the dark metric computation and write to disk with `write_tagged_geotiff`
+    
+    Args:
+        dark_metric_name (str): name of the dark metric to compute, must be key of computation_di
+        computation_di (dict): dict of computations generate with create_dark_metric_computation
+    Returns: 
+        None: writes data to GeoTIFF file
+    """
+
     dark_metric_arr = computation_di[dark_metric_name].compute()
     write_tagged_geotiff(
         uncertainty_dir,
