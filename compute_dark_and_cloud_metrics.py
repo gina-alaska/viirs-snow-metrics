@@ -39,7 +39,7 @@ def count_darkness(dark_on):
     """Count the per-pixel occurrence of polar/winter darkness or cloud cover (in the initialization period) in the snow year.
 
     Args:
-        dark_on (xr.Dataset): Obscured srid cells.
+        dark_on (xr.Dataset): Obscured grid cells.
 
     Returns:
         xarray.DataArray: count of 'Cloud' or 'Night' values.
