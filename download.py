@@ -22,7 +22,7 @@ from config import viirs_params, snow_year_input_dir, SNOW_YEAR
 
 
 def wipe_old_downloads(dl_path):
-    """Convenience functino to prompt user to wipe prior downloads but retain the target directory. The baseline assumption is that all data in `$INPUT_DIR/$SNOW_YEAR` maps to a single cohesive processing run for a single snow year and set of tiles.
+    """Convenience function to prompt user to wipe prior downloads but retain the target directory. The baseline assumption is that all data in `$INPUT_DIR/$SNOW_YEAR` maps to a single cohesive processing run for a single snow year and set of tiles.
 
     Args:
         dl_path (pathlib.Path): The path to the download directory.
