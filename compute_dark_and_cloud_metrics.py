@@ -184,7 +184,6 @@ def is_snow_on_at_dawn(dawn_observation):
 def get_snow_transition_cases(snow_is_on_at_dusk, snow_is_on_at_dawn):
     """Determine the snow transition case during the obscured period.
 
-
     We delay this computation because `np.select` requires boolean arrays. Determine what, if anything, happened to the binary (on or off) snow state between the dusk observation the dawn observation. This information will be used to map different forward and backward data filling strategies for cloud or winter darkness conditions.
 
     Args:
