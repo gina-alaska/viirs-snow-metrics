@@ -1,7 +1,8 @@
-"""Gather data to characterize uncertainty within each tile including cloud persistence, cloud coverage, no decision, etc."""
+"""Gather data to characterize uncertainty within each tile including cloud persistence, bowtie trim, no decision, etc."""
 
 import argparse
 import logging
+import os
 
 from dask.distributed import Client
 
@@ -23,7 +24,6 @@ def count_no_decision_occurence(ds_chunked):
     Returns:
         xarray.DataArray: count of "No decision" values".
     """
-
     logging.info(f"Counting occurence of `No decision` values...")
     no_decision_count = (ds_chunked == inv_cgf_codes["No decision"]).sum(dim="time")
     return no_decision_count
@@ -38,7 +38,6 @@ def count_missing_l1b_occurence(ds_chunked):
     Returns:
         xarray.DataArray: count of "Missing L1B data" values".
     """
-
     logging.info(f"Counting occurence of `Missing L1B data` values...")
     missing_l1b_count = (ds_chunked == inv_cgf_codes["Missing L1B data"]).sum(
         dim="time"
@@ -55,7 +54,6 @@ def count_l1b_calibration_fail(ds_chunked):
     Returns:
         xarray.DataArray: count of "L1B data failed calibration" values".
     """
-
     logging.info(f"Counting occurence of `L1B data failed calibration` values...")
     l1b_fail_count = (ds_chunked == inv_cgf_codes["L1B data failed calibration"]).sum(
         dim="time"
@@ -72,7 +70,6 @@ def count_bowtie_trim(ds_chunked):
     Returns:
         xarray.DataArray: count of "Onboard VIIRS bowtie trim" values".
     """
-
     logging.info(f"Counting occurence of `Onboard VIIRS bowtie trim` values...")
     bowtie_trim_count = (ds_chunked == inv_cgf_codes["Onboard VIIRS bowtie trim"]).sum(
         dim="time"
@@ -80,38 +77,23 @@ def count_bowtie_trim(ds_chunked):
     return bowtie_trim_count
 
 
-def count_darkness(ds_chunked):
-    """Count the per-pixel occurrence of polar/winter darkness in the snow year.
-
-    Args:
-        ds_chunked (xarray.Dataset): The chunked dataset.
-
-    Returns:
-        xarray.DataArray: count of "Night" values".
-    """
-
-    logging.info(f"Counting occurence of `Night` values...")
-    darkness_count = (ds_chunked == inv_cgf_codes["Night"]).sum(dim="time")
-    return darkness_count
-
-
 def get_max_cloud_persistence(ds_chunked):
     """Determine maximum per-pixel cloud persistence value.
 
     Args:
-        ds_chunked (xarray.Dataset): The chunked dataset.
+        ds_chunked (xarray.Dataset): The chunked dataset of cloud persistence.
 
     Returns:
         xarray.DataArray: max cloud persistence value".
     """
-
     logging.info(f"Finding maximum cloud persistence value...")
     max_cloud_persist = ds_chunked.max(dim="time")
     return max_cloud_persist
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="gather_uncertainty.log", level=logging.INFO)
+    log_file_path = os.path.join(os.path.expanduser("~"), "source_data_uncertainty.log")
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Script to Fetch Data For Uncertainty Analysis"
     )
@@ -132,14 +114,13 @@ if __name__ == "__main__":
     uncertainty_data.update({"missing L1B": count_missing_l1b_occurence(cgf_snow_ds)})
     uncertainty_data.update({"L1B fail": count_l1b_calibration_fail(cgf_snow_ds)})
     uncertainty_data.update({"bowtie trim": count_bowtie_trim(cgf_snow_ds)})
-    uncertainty_data.update({"darkness": count_darkness(cgf_snow_ds)})
     cgf_snow_ds.close()
 
     cloud_ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "Cloud_Persistence"
     )
     uncertainty_data.update(
-        {"max cloud persistence": get_max_cloud_persistence(cgf_snow_ds)}
+        {"max_cloud_persistence": get_max_cloud_persistence(cgf_snow_ds)}
     )
     cloud_ds.close()
 

@@ -2,6 +2,7 @@
 
 import argparse
 import logging
+import os
 
 import numpy as np
 from dask.distributed import Client
@@ -46,7 +47,6 @@ def generate_ocean_mask(ds_chunked):
     )
     ocean_mask = (
         ds_chunked.where(ds_chunked == inv_cgf_codes["Ocean"]).count(dim="time")
-
         <= n_obs_to_classify_ocean
     )
     return ocean_mask
@@ -71,7 +71,6 @@ def generate_inland_water_mask(ds_chunked):
         ds_chunked.where(ds_chunked == inv_cgf_codes["Lake / Inland water"]).count(
             dim="time"
         )
-
         <= n_obs_to_classify_inland_water
     )
     return inland_water_mask
@@ -94,14 +93,15 @@ def combine_masks(mask_list):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="mask.log", level=logging.INFO)
+    log_file_path = os.path.join(os.path.expanduser("~"), "mask_computation.log")
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
 
     parser = argparse.ArgumentParser(description="Script to Generate Masks")
-    parser.add_argument("tile_id", type=str, help="MODIS/VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     args = parser.parse_args()
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
-    client = Client()
+    client = Client(n_workers=24)
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
@@ -112,15 +112,14 @@ if __name__ == "__main__":
     l2_mask = generate_l2fill_mask(ds)
     combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
 
-
     mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0})
     write_tagged_geotiff(
-        mask_dir, tile_id, "mask", "ocean", mask_profile, ocean_mask.values
+        mask_dir, tile_id, "_mask", "ocean", mask_profile, ocean_mask.values
     )
     write_tagged_geotiff(
         mask_dir,
         tile_id,
-        "mask",
+        "_mask",
         "inland_water",
         mask_profile,
         inland_water_mask.values,
@@ -128,13 +127,14 @@ if __name__ == "__main__":
     write_tagged_geotiff(
         mask_dir,
         tile_id,
-        "mask",
+        "_mask",
         "l2_fill",
         mask_profile,
         l2_mask.values,
     )
     write_tagged_geotiff(
-        mask_dir, tile_id, "mask", "combined", mask_profile, combined_mask
+        mask_dir, tile_id, "_mask", "combined", mask_profile, combined_mask
     )
+    ds.close()
     client.close()
     print("Mask Generation Script Complete.")

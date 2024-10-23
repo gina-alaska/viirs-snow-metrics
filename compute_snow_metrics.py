@@ -3,13 +3,19 @@
 import logging
 import argparse
 import calendar
+import os
 
 import rasterio as rio
 import numpy as np
 import xarray as xr
 from dask.distributed import Client
 
-from config import preprocessed_dir, mask_dir, single_metric_dir, SNOW_YEAR
+from config import (
+    preprocessed_dir,
+    mask_dir,
+    single_metric_dir,
+    SNOW_YEAR,
+)
 from luts import (
     snow_cover_threshold,
     inv_cgf_codes,
@@ -18,41 +24,10 @@ from luts import (
 from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
+    apply_threshold,
+    apply_mask,
     write_tagged_geotiff,
 )
-
-
-def fill_winter_darkness(chunked_cgf_snow_cover):
-    """
-    Fill grid cells classified as "Night" (i.e. polar / winter darkness) with the snow cover value from the most recent previous day with valid data.
-
-    Args:
-        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
-
-    Returns:
-        xr.DataArray: snow cover datacube with winter darkness filled
-    """
-    chunked_cgf_snow_cover = chunked_cgf_snow_cover.where(
-        chunked_cgf_snow_cover != inv_cgf_codes["Night"], np.nan
-    )
-    chunked_cgf_snow_cover = chunked_cgf_snow_cover.ffill(dim="time")
-    return chunked_cgf_snow_cover
-
-
-def apply_threshold(chunked_cgf_snow_cover):
-    """Apply the snow cover threshold to the CGF snow cover datacube. Grid cells exceeding the threshold value are considered to be snow-covered.
-
-    Note that 100 is the maximum valid snow cover value.
-
-    Args:
-        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
-
-    Returns:
-        snow_on (xr.DataArray): boolean values representing snow cover"""
-    snow_on = (chunked_cgf_snow_cover > snow_cover_threshold) & (
-        chunked_cgf_snow_cover <= 100
-    )
-    return snow_on
 
 
 def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
@@ -265,57 +240,39 @@ def compute_css_metrics(snow_on):
     return css_metric_dict
 
 
-def count_cloud_occurence(chunked_cgf_snow_cover):
-    """Count the per-pixel occurrence of "Cloud" in the snow year.
-
-    Args:
-        chunked_cgf_snow_cover (xarray.Dataset): The chunked dataset.
-
-    Returns:
-        xr.DataArray: count of "Cloud" values".
-    """
-
-    logging.info(f"Counting occurence of `Cloud` values...")
-    cloud_day_count = (chunked_cgf_snow_cover == inv_cgf_codes["Cloud"]).sum(dim="time")
-    return cloud_day_count
-
-
-def apply_mask(mask_fp, array_to_mask):
-    """Mask out values from the snow metric array.
-
-    Args:
-        mask_fp (str): file path to the mask GeoTIFF
-        array_to_mask (xr.DataArray): snow metric array to be masked
-    Returns:
-        xr.DataArray: masked snow metric array, masked values set to 0"""
-
-    with rio.open(mask_fp) as src:
-        mask_arr = src.read(1)
-    mask_applied = mask_arr * array_to_mask
-    return mask_applied
-
-
 if __name__ == "__main__":
-    logging.basicConfig(filename="compute_metrics.log", level=logging.INFO)
-
+    log_file_path = os.path.join(os.path.expanduser("~"), "snow_metric_computation.log")
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
     parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument(
+        "--alt_input",
+        type=str,
+        help="Alternate input file indicated by filename suffix.",
+    )
     args = parser.parse_args()
     tile_id = args.tile_id
     logging.info(f"Computing snow metrics for tile {tile_id}.")
+    # A Dask LocalCluster speeds this script up 10X
+    client = Client(n_workers=9)
+    print("Monitor the Dask client dashboard for progress at the link below:")
+    print(client.dashboard_link)
+    if args.alt_input is not None:
+        alt_input = args.alt_input
+        logging.info(f"Using alternate input file: {alt_input}")
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{alt_input}.nc"
+        chunky_ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        )
+        output_tag = alt_input
+    else:
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
+        chunky_ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        )
 
-    # A Dask LocalCluster Client speeds this script up 10X
-    client = Client()
-    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
-
-    chunky_ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-    )
-
-    logging.info(f"Filling 'Night' Grid Cells...")
-    darkness_filled = fill_winter_darkness(chunky_ds)
     logging.info(f"Applying Snow Cover Threshold...")
-    snow_is_on = apply_threshold(darkness_filled)
+    snow_is_on = apply_threshold(chunky_ds)
     snow_metrics = dict()
     snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
     snow_metrics.update({"last_snow_day": get_last_snow_day_array(snow_is_on)})
@@ -328,12 +285,11 @@ if __name__ == "__main__":
         }
     )
     snow_metrics.update({"snow_days": count_snow_days(snow_is_on)})
-    snow_metrics.update({"no_snow_days": count_no_snow_days(darkness_filled)})
+    snow_metrics.update({"no_snow_days": count_no_snow_days(chunky_ds)})
     snow_metrics.update(compute_css_metrics(snow_is_on))
-    snow_metrics.update({"cloud_days": count_cloud_occurence(darkness_filled)})
 
     # iterate through keys in snow_metrics dict and apply mask
-    combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
+    combined_mask = mask_dir / f"{tile_id}__mask_combined_{SNOW_YEAR}.tif"
     for metric_name, metric_array in snow_metrics.items():
         snow_metrics[metric_name] = apply_mask(combined_mask, metric_array)
 
@@ -348,7 +304,8 @@ if __name__ == "__main__":
             metric_name,
             single_metric_profile,
             metric_array.compute().values.astype("int16"),
-            # we don't actually have to call .compute(), but this communicates a chunked DataArray input and there is no performance penalty vs. just calling .values
+            # don't have to call .compute(), but communicates a chunked DataArray input
         )
     client.close()
+    chunky_ds.close()
     print("Snow Metric Computation Script Complete.")

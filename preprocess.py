@@ -3,6 +3,7 @@
 import argparse
 import logging
 import pickle
+import os
 from datetime import datetime, timedelta
 
 import xarray as xr
@@ -12,35 +13,9 @@ import pandas as pd
 import rioxarray
 import dask.array as da
 
-from config import SNOW_YEAR, preprocessed_dir, snow_year_input_dir
+from config import snow_year_input_dir
 from luts import data_variables
-
-
-def list_input_files(src_dir):
-    """List all .tif files in the source directory.
-
-    Args:
-       src_dir (Path): The source directory containing the .tif files.
-
-    Returns:
-       list: A list of all .tif files in the source directory.
-    """
-    fps = [x for x in src_dir.glob("*.tif")]
-    logging.info(f"Downloaded file count is {len(fps)}.")
-    logging.info(f"Files that will be included in dataset: {fps}.")
-    return fps
-
-
-def parse_tile(fp):
-    """Parse the tile from the filename.
-
-    Args:
-       fp (Path): The file path object.
-
-    Returns:
-       str: The tile extracted from the filename.
-    """
-    return fp.name.split("_")[2]
+from shared_utils import parse_tile, list_input_files, write_single_tile_xrdataset
 
 
 def parse_date(fp):
@@ -217,7 +192,7 @@ def create_single_tile_dataset(tile_di, tile):
         "y": lat[:, 0],
     }
 
-    # CP note: just use CGF snow [data_variables[2]] for faster testing
+    # CP note: if testing just use CGF snow [data_variables[1]]
     for data_var in data_variables:
         logging.info(f"Stacking data for {data_var}...")
         raster_stack = make_sorted_raster_stack(
@@ -236,31 +211,21 @@ def create_single_tile_dataset(tile_di, tile):
     return ds
 
 
-def write_tile_dataset(ds, tile):
-    """Write the DataSet to a netCDF file.
-
-    Args:
-       ds (xarray.Dataset): The single-tile dataset.
-       tile (str): The tile being processed.
-    """
-    filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}.nc"
-    ds.to_netcdf(filename)
-    logging.info(f"NetCDF dataset for tile {tile} wriiten to {filename}.")
-
-
 if __name__ == "__main__":
-    logging.basicConfig(filename="preprocess.log", level=logging.INFO)
+    log_file_path = os.path.join(os.path.expanduser("~"), "datacube_preprocess.log")
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
 
     parser = argparse.ArgumentParser(description="Preprocessing Script")
-    parser.add_argument("tile_id", type=str, help="MODIS/VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     args = parser.parse_args()
     tile_id = args.tile_id
 
-    logging.info(f"Creating dataset for tile {tile_id}.")
+    logging.info(f"Creating preprocessed dataset for tile {tile_id}...")
 
     geotiffs = list_input_files(snow_year_input_dir)
     geotiff_di = construct_file_dict(geotiffs)
-
     tile_ds = create_single_tile_dataset(geotiff_di, tile_id)
-    write_tile_dataset(tile_ds, tile_id)
+    write_single_tile_xrdataset(tile_ds, tile_id)
+
+    logging.info(f"Creating preprocessed dataset for tile {tile_id} complete.")
     print("Preprocessing Script Complete.")

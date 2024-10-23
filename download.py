@@ -22,7 +22,7 @@ from config import viirs_params, snow_year_input_dir, SNOW_YEAR
 
 
 def wipe_old_downloads(dl_path):
-    """Wipe prior downloads but retain the target directory. Processing pipeline is simplified with assumption that all data in `$INPUT_DIR/$SNOW_YEAR` maps to a single cohesive processing run.
+    """Convenience function to prompt user to wipe prior downloads but retain the target directory. The baseline assumption is that all data in `$INPUT_DIR/$SNOW_YEAR` maps to a single cohesive processing run for a single snow year and set of tiles.
 
     Args:
         dl_path (pathlib.Path): The path to the download directory.
@@ -54,9 +54,9 @@ def wipe_old_downloads(dl_path):
 
 
 def check_data_version(ds_short_name):
-    """Get latest version number of the dataset.
+    """Get latest version number of the dataset. In general, we'll always want to download the latest version of the data and so this should help us in the future. MODIS has seen numerous version updates, would not be surprised if VIIRS does too in the future.
     Args:
-        ds_short_name (str): The short name of the dataset.
+        ds_short_name (str): The short name of the dataset. This is the unique "special" NSIDC alphanumeric identifier for the dataset and is used in the CMR metadata search.
 
     Returns:
         int: The latest version number.
@@ -73,7 +73,12 @@ def check_data_version(ds_short_name):
 
 def determine_tiles_for_bbox(bounding_box):
     """
-    The granule search API isn't totally reliable: in testing superfluous tiles were being downloaded, so we need to ping the tile search API endpoint and use the results to trim down the list of granules.
+    The granule search API isn't totally reliable: in testing superfluous tiles can be downloaded. Pinging the tile search API endpoint and using the results to trim down the list of granules is helpful.
+
+    Args:
+        bounding_box (str): The bounding box for the geographic area of interest.
+    Returns:
+        set: VIIRS sinusoidal grid tiles that cover the bounding box.
     """
     tile_search_url = (
         f"https://cmr.earthdata.nasa.gov/search/tiles?bounding_box={bounding_box}"
@@ -82,6 +87,7 @@ def determine_tiles_for_bbox(bounding_box):
 
     tile_strs = []
     for tile in tile_list:
+        # hacky zero padding
         if tile[0] < 10:
             hstr = f"h0{tile[0]}"
         else:
@@ -100,8 +106,14 @@ def determine_tiles_for_bbox(bounding_box):
 
 
 def generate_monthly_dl_chunks(snow_year):
-    intervals = []
+    """Generate monthly time intervals for downloading data. A snow year is defined as August 1 to July 31 to this function helps get the correct months lined up with the correct year.
 
+    Args:
+        snow_year (int): The snow year of interest.
+    Returns:
+        list: A list of monthly time intervals.
+    """
+    intervals = []
     for month in range(1, 13):
         year = snow_year if month >= 8 else snow_year + 1
         start_date = datetime(year, month, 1)
@@ -138,11 +150,13 @@ def start_api_session(ds_short_name, ds_latest_version):
     s = session.get(capability_url)
     response = session.get(s.url, auth=(uid, pswd))
     if response.status_code != 200:
+        # bail
         auth_fail_msg = f"API authentication failed with status code {response.status_code}, exiting program."
         print(auth_fail_msg)
         logging.error(auth_fail_msg)
         sys.exit(1)
     else:
+        # pass the session on
         auth_pass_msg = f"{response.status_code}, API authentication successful."
         print(auth_pass_msg)
         logging.info(auth_pass_msg)
@@ -180,9 +194,9 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
         )
         results = json.loads(response.content)
         if len(results["feed"]["entry"]) == 0:
-            # Out of results, so break out of loop
+            # out of results, break out of loop
             break
-        # Collect results and increment page_num
+        # collect results and increment page_num
         granules.extend(results["feed"]["entry"])
         search_params["page_num"] += 1
 
@@ -193,13 +207,20 @@ def search_granules(ds_latest_version, ds_short_name, tstart, tstop, bbox):
     logging.info(
         f"The average size of each granule is {mean(granule_sizes):.2f} MB and the total size of all {len(granules)} granules is {sum(granule_sizes):.2f} MB"
     )
-    # CP note: low-level meta for all granules, retaining for debugging
+    # CP note: results is low-level meta for granules, log for debugging
     logging.info(results)
     return granules
 
 
 def filter_granules_based_on_tiles(granules, ref):
-    """Filter granules based on a list of MODIS (i.e., VIIRS) sinusoidal grid tiles."""
+    """Filter granules based on a list of VIIRS sinusoidal grid tiles know to match the spatial domain.
+
+    Args:
+        granules (list): A list of candidate granules.
+        ref (set): A set of reference tiles.
+    Returns:
+        list: A list of granules that match the reference tiles.
+    """
     filtered = [x for x in granules if x["producer_granule_id"].split(".")[2] in ref]
     logging.info(f"After filtering {len(filtered)} granules remain.")
 
@@ -245,7 +266,7 @@ def set_n_orders_and_mode_and_page_size(granules):
 def construct_request(
     ds_latest_version, ds_short_name, tstart, tstop, bbox, req_mode, pg_size, n_pages
 ):
-    """Construct the API Download Request.
+    """Construct the API Download Requests.
 
     Args:
         ds_latest_version (str): The latest version of the dataset.
@@ -261,35 +282,35 @@ def construct_request(
         tuple: containing a list of API endpoints and a dictionary of download parameters.
     """
     base_url = "https://n5eil02u.ecs.nsidc.org/egi/request"
-
+    # this is the sauce where we ask NSIDC to do additional upstream processing
     dl_param_dict = {
         "short_name": ds_short_name,
         "version": ds_latest_version,
         "temporal": f"{tstart},{tstop}",
         "bounding_box": bbox,
-        "format": "GeoTIFF",  # CP note: NetCDF4-CF option failed to return data in test
-        "projection": "GEOGRAPHIC",
+        "format": "GeoTIFF",  # CP note: `NetCDF4-CF`` option failed to return data in test - though this may be a more efficient alternative
+        "projection": "GEOGRAPHIC",  # CP note: this is nice!
         "page_size": pg_size,
         "request_mode": req_mode,
     }
 
-    # CP note: could use urllib quote - but will follow NSIDC example
+    # CP note: could use urllib quote - but will follow NSIDC example of constructing the request string
     dl_string = "&".join("{!s}={!r}".format(k, v) for (k, v) in dl_param_dict.items())
     dl_string = dl_string.replace("'", "")
 
-    # Construct request URL(s)
+    # construct request URLs
     endpoint_list = []
     for i in range(n_pages):
         page_val = i + 1
         api_request = f"{base_url}?{dl_string}&page_num={page_val}"
         endpoint_list.append(api_request)
         logging.info(f"Request endpoint: {api_request}")
-    # CP note: may not need the list of endpoints to download data because the ordering function can use the dl_param_dict to construct the orders as well. retain for logging or sharing
+    # CP note: may not need the list of endpoints to download data because the ordering function can use the dl_param_dict to construct the orders as well. retain for logging and debugging though.
     return endpoint_list, dl_param_dict
 
 
 def make_async_data_orders(n_orders, session, dl_param_dict):
-    """Make the download orders. The API will need to verify the order, prepare it, and perhaps do some processing before making it ready for download. An authenticated session must pass to the scope of this function.
+    """Make the download orders. The API will need to verify the order and process and prepare it before making it ready available to download. An authenticated session must pass to the scope of this function.
 
     Args:
         n_orders (int): orders (pages) required based on the granules requested.
@@ -344,7 +365,7 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
         # Continue loop while request is still processing
         while status == "pending" or status == "processing":
             logging.info("Status is not complete. Trying again.")
-            time.sleep(300)  # emit status every 5 min
+            time.sleep(3600)  # emit status every hour
             loop_response = session.get(statusURL)
             loop_response.raise_for_status()
             loop_root = ET.fromstring(loop_response.content)
@@ -359,7 +380,8 @@ def make_async_data_orders(n_orders, session, dl_param_dict):
             if status == "pending" or status == "processing":
                 continue
 
-        # Order can either complete, complete_with_errors, or fail:
+        # Order can either complete, complete with errors, or fail
+        # CP note: not really sure what "complete with error" means
         if status == "complete_with_errors" or status == "failed":
             logging.error("Order error messages:")
             for message in loop_root.findall("./processInfo/"):
@@ -389,14 +411,23 @@ def download_order(session, download_urls, dl_path):
     for dl_url in download_urls:
         logging.info("Beginning download of zipped output...")
         zip_response = session.get(dl_url)
-        zip_response.raise_for_status()
+        # CP note: hacky retry loop, but did once get a "service unavailable" status when the request URL itself was valid. try 3x before giving up.
+        try:
+            for _ in range(3):
+                zip_response = session.get(dl_url)
+                if zip_response.status_code == 200:
+                    break
+                time.sleep(120)  # Pause for 2 minutes
+            zip_response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            print(f"Error downloading zip file: {e}")
         with zipfile.ZipFile(io.BytesIO(zip_response.content)) as z:
             z.extractall(dl_path)
     logging.info("Data request is complete.")
 
 
 def flatten_download_directory(dl_path):
-    """Clean up downloads by removing individual granule folders and by moving files from nested directories to the root download directory.
+    """Clean up downloads by removing individual granule folders and by moving files from nested directories to the root download directory. Goal is to have a single directory of input data for processing, and use file names to identify the types of data within each file.
 
     Args:
         dl_path (pathlib.Path): The directory path of the download.
@@ -419,6 +450,8 @@ def flatten_download_directory(dl_path):
 def validate_download(dl_path, number_granules_requested):
     """Validate the download process by warning if file count does not match the number of granules requested. Assuming all variables are requested and a GeoTIFF format, the number of downloaded files should be 5X the granule count (i.e., 5 GeoTIFFs, one per variable, per granule).
 
+    CP Note: this function is a good practice, but it needs work. I'm retaining this function for now, but it may get moved to a separate module or refactored.
+
     Args:
         dl_path (pathlib.Path): The directory path of the download.
 
@@ -438,7 +471,8 @@ def validate_download(dl_path, number_granules_requested):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(filename="download.log", level=logging.INFO)
+    log_file_path = os.path.join(os.path.expanduser("~"), "input_data_download.log")
+    logging.basicConfig(filename=log_file_path, level=logging.INFO)
 
     wipe_old_downloads(snow_year_input_dir)
 
@@ -475,7 +509,6 @@ if __name__ == "__main__":
 
         dl_urls = make_async_data_orders(page_num, api_session, dl_params)
         download_order(api_session, dl_urls, snow_year_input_dir)
-
         flatten_download_directory(snow_year_input_dir)
         validate_download(snow_year_input_dir, len(granule_list))
 

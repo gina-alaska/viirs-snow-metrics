@@ -1,15 +1,42 @@
 """Utility functions used across multiple modules."""
-
 import logging
 import pickle
 
 import xarray as xr
 import rasterio as rio
 
-from config import SNOW_YEAR
+from luts import snow_cover_threshold
+from config import SNOW_YEAR, preprocessed_dir
 
 
-def open_preprocessed_dataset(fp, chunk_dict, data_variable):
+def list_input_files(src_dir):
+    """List all .tif files in the source directory.
+
+    Args:
+       src_dir (Path): The source directory containing the .tif files.
+
+    Returns:
+       list: A list of all .tif files in the source directory.
+    """
+    fps = [x for x in src_dir.glob("*.tif")]
+    logging.info(f"Downloaded file count is {len(fps)}.")
+    logging.info(f"Files that will be included in dataset: {fps}.")
+    return fps
+
+
+def parse_tile(fp):
+    """Parse the VIIRS tile ID from the filename.
+
+    Args:
+       fp (Path): The file path object.
+
+    Returns:
+       str: The tile ID (e.g., h11v02) extracted from the filename.
+    """
+    return fp.name.split("_")[2]
+
+
+def open_preprocessed_dataset(fp, chunk_dict, data_variable=None):
     """Open a preprocessed dataset for a given tile.
 
     Args:
@@ -17,12 +44,47 @@ def open_preprocessed_dataset(fp, chunk_dict, data_variable):
         chunk_dict (dict): how to chunk the dataset, like `{"time": 52}`
 
     Returns:
-       xarray.Dataset: The chunked dataset.
+       xr.Dataset: The chunked dataset.
     """
     logging.info(f"Opening preprocessed file {fp} as chunked Dataset...")
+    if data_variable is not None:
+        with xr.open_dataset(fp)[data_variable].chunk(chunk_dict) as ds_chunked:
+            return ds_chunked
+    else:
+        with xr.open_dataset(fp).chunk(chunk_dict) as ds_chunked:
+            return ds_chunked
 
-    with xr.open_dataset(fp)[data_variable].chunk(chunk_dict) as ds_chunked:
-        return ds_chunked
+
+def write_single_tile_xrdataset(ds, tile, suffix=None):
+    """Write the DataSet to a netCDF file.
+
+    Args:
+       ds (xr.Dataset): The single-tile dataset.
+       tile (str): The tile being processed.
+       suffix (str): An optional suffix to append to the filename.
+    """
+    if suffix is not None:
+        filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}_{suffix}.nc"
+    else:
+        filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}.nc"
+    ds.to_netcdf(filename)
+    logging.info(f"NetCDF dataset for tile {tile} wriiten to {filename}.")
+
+
+def apply_threshold(chunked_cgf_snow_cover):
+    """Apply the snow cover threshold to the CGF snow cover datacube. Grid cells exceeding the threshold value are considered to be snow-covered.
+
+    Note that 100 is the maximum valid snow cover value.
+
+    Args:
+        chunked_cgf_snow_cover (xr.DataArray): preprocessed CGF snow cover datacube
+
+    Returns:
+        snow_on (xr.DataArray): boolean values representing snow cover"""
+    snow_on = (chunked_cgf_snow_cover > snow_cover_threshold) & (
+        chunked_cgf_snow_cover <= 100
+    )
+    return snow_on
 
 
 def fetch_raster_profile(tile_id, updates=None):
@@ -47,6 +109,22 @@ def fetch_raster_profile(tile_id, updates=None):
         out_profile.update(updates)
     logging.info(f"GeoTIFFs will use the raster creation profile {out_profile}.")
     return out_profile
+
+
+def apply_mask(mask_fp, array_to_mask):
+    """Mask out values from an array.
+
+    Args:
+        mask_fp (str): file path to the mask GeoTIFF
+        array_to_mask (xr.DataArray): array to be masked
+    Returns:
+        xr.DataArray: masked array where masked values are set to 0
+    """
+
+    with rio.open(mask_fp) as src:
+        mask_arr = src.read(1)
+    mask_applied = mask_arr * array_to_mask
+    return mask_applied
 
 
 def write_tagged_geotiff(dst_dir, tile_id, tag_name, tag_value, out_profile, arr):

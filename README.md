@@ -1,7 +1,7 @@
 # VIIRS Snow Metrics for Alaska
 
 ## System Requirements
-Production runs of this code will execute on GINA's "Elephant" machine. Additional testing may occur on SNAP's "Atlas" compute cluster. These are both Linux machines. Other execution environments are not supported. Users will need ample free disk space (order 500 GB) per snow year.
+Production runs of this code will execute on GINA's "Elephant" machine. Additional testing may occur on SNAP's "Atlas" compute nodes. These are both Linux machines. Other execution environments are not supported. Users will need ample free disk space (order 500 GB) per snow year. Elephant has 18 cores / 144 CPUs.
 
 ## Setup
 Create the conda environment from the `environment.yml` file if you have not done so already.
@@ -62,22 +62,27 @@ export MALLOC_TRIM_THRESHOLD_=0
 ```
 
 ## Usage
-### `download.py`
+#### `download.py`
 Run this script with no arguments to download the source dataset from the NSIDC DAAC. Users will be prompted to enter valid Earthdata credentials. Users must have an Earthdata account to download the necessary data. Data will be downloaded to the `$INPUT_DIR/$SNOW_YEAR` directory. The script will ask to wipe the contents of `$INPUT_DIR/$SNOW_YEAR` before proceeding with the download. Total download time will of course depend on your connection speed, but it will also depend on how busy the upstream data service is and how complicated your data orders are. For example, if you are asking the service to perform [reformatting (e.g., h5 to GeoTIFF)](https://nsidc.org/data/user-resources/help-center/table-key-value-pair-kvp-operands-subsetting-reformatting-and-reprojection-services) the service will take longer to prepare the order. Consider executing `download.py` in a screen session or similar. It may take a full day to prepare the order for a download of an entire snow year. The order preparation may take longer than the download itself. A log file (`download.log`) that captures the API endpoints used as well as information about the requested granules will be written to the same directory as the download script.
-#### Example Usage
+##### Example Usage
 `python download.py`
 
-### `preprocess.py`
+#### `preprocess.py`
 Run this script with a `tile_id` argument to preprocess the downloaded data. The script will analyze the data from `$INPUT_DIR` and construct a hash table with keys based on the tile of the source dataset and the data variable (one of `"Algorithm_Bit_Flags_QA", "Basic_QA" "CGF_NDSI_Snow_Cover", "Cloud_Persistence", "Daily_NDSI_Snow_Cover"`) represented by the GeoTIFF. The script will construct a time-indexed netCDF file containing the entire set of data for the `SNOW_YEAR` being processed and write the file to `$SCRATCH_DIR/$SNOW_YEAR/preprocessed`. Execution time is about 15 minutes per tile.
-#### Example Usage
+##### Example Usage
 `python preprocess.py h11v02`
 
-### `compute_masks.py`
+#### `filter_and_fill.py`
+Apply a Savitzky-Golay filter to low illumination observations (solar zenith angles < 70 degrees), fill in observation gaps caused by night and cloud conditions, and write a new netCDF dataset containing the output. There are two arguments: the VIIRS Tile ID and the suffix to tag the output file name with. Execution time can range between 15 and 45 minutes per tile.
+##### Example Usage
+`python smooth_low_illumination_observations.py h11v02 filtered_filled`
+
+#### `compute_masks.py`
 Run this script with a `tile_id` argument to create masks from the preproccesed data. Currently the script will create four mask GeoTIFFs for the following conditions: ocean, lake / inland water, L2 Fill (i.e., no data), and a combined mask of the previous conditions. Masks will be written to disk as GeoTIFFs to the `$SCRATCH_DIR/$SNOW_YEAR/masks` directory. Execution time is about 2 minutes per tile.
-#### Example Usage
+##### Example Usage
 `python compute_masks.py h11v02`
 
-### `compute_snow_metrics.py`
+#### `compute_snow_metrics.py`
 Run this script with a `tile_id` argument to compute snow metrics from the preproccesed data. Outputs will be single-band GeoTIFFs (one per metric per tile) written to the `$SCRATCH_DIR/$SNOW_YEAR/single_metric_geotiffs` directory. The metrics currently computed include (in no particular order):
 1. First Snow Day (FSD) of the full snow season (FSS). Also called FSS start day.
 2. Last Snow Day (LSD) of the FSS. Also called FSS end day.
@@ -92,19 +97,27 @@ Run this script with a `tile_id` argument to compute snow metrics from the prepr
 11. Number of Cloud Days: count of all cloud-covered days in a snow year
 
 Execution time is about 15 minutes per tile.
-#### Example Usage
+##### Example Usage
 `python compute_snow_metrics.py h11v02`
 
-### `postprocess.py`
+#### `postprocess.py`
 Run this script with no arguments to postprocess all data in the `single_metric_geotiffs` directory. The script spawns subprocesses that call GDAL routines to reproject GeoTIFFs to ESPG:3338, align grids, and mosaic tiles. Outputs are written to compressed GeoTIFFs. Additional tasks will include stacking individual rasters to a final multiband GeoTIFF.
-#### Example Usage
+##### Example Usage
 `python postprocess.py`
 
 ## Other Modules
-### `shared_utils.py`
+#### `compute_dark_and_cloud_metrics.py`
+This script is used to compute metrics related to dark and cloud observations from a preprocessed single tile dataset. The script is required to develop, tune, and compare algorithms for filtering dark and/or cloudy observations. The input dataset is analyzed and GeoTIFFs with information about snow cover observations around the onset (called "dusk" in the code) and conclusion (called "dawn" in the code) of a darkness or cloud condition are computed. For each of these obscured (darkness and cloud) conditions, the script will yield GeoTIFFs representing the time indicies of the observations prior to ("dusk") and immediately after ("dawn") of the obscured condition as well as the median time index between these values. GeoTIFFs are also created that represent the value of the `CGF_NSDI_SNOWCOVER` variable at the dawn and dusk indices and the binary snow cover status (the variable value with the threshold applied) at these indices. The final GeoTIFF created indicates whether or not the binary snow cover status transitioned (off to on, on to off) during the obscured period. The script accepts user arguments for the input because using the script to tune the filtering algorithm requires computing the metrics for "raw" and "filtered" data. Omitting the input argument will run the script on the unfiltered data by default. Execution time will really depend on the tile that is being processed. Higher latitude tiles with more grid cells that experience long winter darkness periods will take longer. To compute on the smoothed data, just provide the file suffix.
+##### Example Usage
+`python compute_dark_and_cloud_metrics.py h11v02`
+
+`python compute_dark_and_cloud_metrics.py h11v02 --smoothed_input smoothed_low_illumination`
+
+#### `gather_uncertainty_data.py`
+Gather data for downstream uncertainty analyses. This module will read the preprocessed netCDF file and construct GeoTIFFs for maximum cloud persistence and also yield rasters that indicate other anomalous values (e.g., bowtie trim) if they occur anywhere in the time series. Running this script is not strictly required.
+##### Example Usage
+`python gather_uncertainty_data.py h11v02`
+
+#### `shared_utils.py`
 This module contains convenience and utility functions that are used across multiple other scripts and modules. At the moment these mostly are functions for file input and output.
 
-### `gather_uncertainty_data.py`
-Gather data for downstream uncertainty analyses. This module will construct GeoTIFFs for maximum cloud persistence and also yield rasters that indicate other anomalous values if they occur anywhere in the time series.
-#### Example Usage
-`python gather_uncertainty_data.py h11v02`

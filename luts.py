@@ -3,9 +3,6 @@
 short_name = "VNP10A1F"
 
 parameter_sets = {
-    "dev_params": {
-        "bbox": "-146,65,-145,66",
-    },
     "prod_params": {
         "bbox": "172,51,-130,72",
     },
@@ -13,11 +10,10 @@ parameter_sets = {
 
 data_variables = [
     "Algorithm_Bit_Flags_QA",
-    "Basic_QA",
     "CGF_NDSI_Snow_Cover",
     "Cloud_Persistence",
-    "Daily_NDSI_Snow_Cover",
 ]
+# omitting "Daily_NDSI_Snow_Cover" and "Basic_QA" from the above list because although part of the source data, they are not required at this time
 
 cgf_snow_cover_codes = {
     **{i: "NDSI snow cover valid" for i in range(101)},
