@@ -31,7 +31,7 @@ cgf_snow_cover_codes = {
 # CP note: inverting above to reference array values by the descriptive string
 inv_cgf_codes = {v: k for k, v in cgf_snow_cover_codes.items()}
 
-snow_cover_threshold = 50
+snow_cover_threshold = 20
 n_obs_to_classify_ocean = 10
 n_obs_to_classify_inland_water = 10
 css_days_threshold = 14
