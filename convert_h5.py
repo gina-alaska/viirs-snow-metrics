@@ -3,6 +3,7 @@ import os
 import re
 import xarray as xr
 import rioxarray as rio
+from rasterio.enums import Resampling
 import h5py
 import numpy as np
 from pathlib import Path
@@ -56,9 +57,17 @@ def create_proj_from_viirs_snow_h5(spatial_metadata):
     return pyproj.CRS.from_proj4(proj_string)
 
 
-def convert_data_array_to_geotiff(data_array, output_path):
+def project_dataset_to_3338(data_array):
+    target_crs = pyproj.CRS.from_epsg(3338)
+    data_array = data_array.rio.reproject(
+        target_crs, resolution=375, resampling=Resampling.nearest
+    )
+    return data_array
 
-    print(f"Converting {data_array} to {output_path}...")
+
+def convert_data_array_to_geotiff(data_array, output_path):
+    print(f"Exporting {data_array.name} as {output_path.name}...")
+    data_array.rio.to_raster(output_path, dirver="COG", compression="LZW")
 
 
 def create_xarray_from_viirs_snow_h5(hdf5_path):
@@ -69,15 +78,14 @@ def create_xarray_from_viirs_snow_h5(hdf5_path):
         phony_dims="access",
     )
     x_dim, y_dim = extract_coords_from_viirs_snow_h5(hdf5_path)
+    dataset = dataset.assign_coords(XDim=x_dim, YDim=y_dim)
     crs = create_proj_from_viirs_snow_h5(dataset["Projection"].attrs)
     dataset = dataset.drop_vars("Projection", errors="ignore")
-    dataset.rio.write_crs(crs.to_wkt())
 
-    return dataset
+    return dataset, crs
 
 
 def main():
-    # Set up argument parser
     parser = argparse.ArgumentParser(
         description="Convert HDF5 files to Georeferenced GeoTIFF files."
     )
@@ -102,21 +110,25 @@ def main():
 
     # Process each HDF5 file
     for hdf5_file in args.files:
+
         hdf5_path = Path(hdf5_file)
+
         if not hdf5_path.exists() or not hdf5_path.is_file():
             print(f"Warning: File not found or not a file: {hdf5_path}")
             continue
-
+        print("Processing", hdf5_path.name)
+        # Unused, may be relavant for other datasets
         with h5py.File(hdf5_path, "r") as hdf:
             UpperLeftX, UpperLeftY, LowerRightX, LowerRightY = parse_metadata(hdf)
 
-        # Set output GeoTIFF path
-        output_path = output_dir / (hdf5_path.stem + ".tif")
+        dataset, crs = create_xarray_from_viirs_snow_h5(hdf5_path)
 
-        dataset = create_xarray_from_viirs_snow_h5(hdf5_path)
-
-        for da in dataset.data_vars:
-            convert_data_array_to_geotiff(hdf5_path, output_path)
+        for data_var in dataset.data_vars:
+            da = dataset[data_var]
+            da = da.rio.write_crs(crs)
+            da = project_dataset_to_3338(da)
+            output_path = output_dir / (".".join([da.name, hdf5_path.stem, "tif"]))
+            convert_data_array_to_geotiff(da, output_path)
 
 
 if __name__ == "__main__":
