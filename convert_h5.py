@@ -57,17 +57,36 @@ def create_proj_from_viirs_snow_h5(spatial_metadata):
     return pyproj.CRS.from_proj4(proj_string)
 
 
-def project_dataset_to_3338(data_array):
-    target_crs = pyproj.CRS.from_epsg(3338)
+def project_dataset(data_array, epsg):
+    target_crs = pyproj.CRS.from_epsg(epsg)
+    if target_crs.axis_info[0].unit_name in ["metre", "meter"]:
+        resolution = 375
+    else:
+        resolution = None
     data_array = data_array.rio.reproject(
-        target_crs, resolution=375, resampling=Resampling.nearest
+        target_crs, resampling=Resampling.nearest, resolution=resolution
     )
     return data_array
 
 
+def add_overviews(output_path):
+    import rasterio
+
+    with rasterio.open(output_path, "r+") as ds:
+        ds.build_overviews([2, 4, 8, 16, 32], Resampling.nearest)
+        ds.update_tags(ns="rio_overview", resampling="nearest")
+
+
 def convert_data_array_to_geotiff(data_array, output_path):
     print(f"Exporting {data_array.name} as {output_path.name}...")
-    data_array.rio.to_raster(output_path, dirver="COG", compression="LZW")
+    data_array.rio.to_raster(
+        output_path,
+        dirver="COG",
+        compression="LZW",
+        tiled=True,
+        dtype="uint8",
+        overview_resampling="nearest",
+    )
 
 
 def create_xarray_from_viirs_snow_h5(hdf5_path):
@@ -100,7 +119,18 @@ def main():
         "--output-dir",
         metavar="DIR",
         default="./geotiff",
-        help="Directory to save the output GeoTIFF files (default: ./geotiff ).",
+        help="Directory to save the output GeoTIFF files. Default: ./geotiff",
+    )
+    parser.add_argument(
+        "--epsg",
+        type=int,
+        default=4326,
+        help="EPSG code for reprojection. Default: 4326. Enter 0 to skip reprojection.",
+    )
+    parser.add_argument(
+        "--overviews",
+        action="store_true",
+        help="Generate internal overviews after geotiff creation. Default: False",
     )
 
     args = parser.parse_args()
@@ -108,7 +138,11 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Process each HDF5 file
+    epsg = args.epsg
+    overviews = args.overviews
+    print(overviews)
+
+    # Process each HDF5 file entered as an argument
     for hdf5_file in args.files:
 
         hdf5_path = Path(hdf5_file)
@@ -116,7 +150,9 @@ def main():
         if not hdf5_path.exists() or not hdf5_path.is_file():
             print(f"Warning: File not found or not a file: {hdf5_path}")
             continue
+
         print("Processing", hdf5_path.name)
+
         # Unused, may be relavant for other datasets
         with h5py.File(hdf5_path, "r") as hdf:
             UpperLeftX, UpperLeftY, LowerRightX, LowerRightY = parse_metadata(hdf)
@@ -126,9 +162,14 @@ def main():
         for data_var in dataset.data_vars:
             da = dataset[data_var]
             da = da.rio.write_crs(crs)
-            da = project_dataset_to_3338(da)
+            if epsg:
+                da = project_dataset(da, epsg)
             output_path = output_dir / (".".join([da.name, hdf5_path.stem, "tif"]))
             convert_data_array_to_geotiff(da, output_path)
+
+            if overviews:
+                print("Generating internal overviews")
+                add_overviews(output_path)
 
 
 if __name__ == "__main__":
