@@ -140,7 +140,6 @@ def main():
 
     epsg = args.epsg
     overviews = args.overviews
-    print(overviews)
 
     # Process each HDF5 file entered as an argument
     for hdf5_file in args.files:
