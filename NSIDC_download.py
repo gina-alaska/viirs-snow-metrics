@@ -392,12 +392,12 @@ def cmr_filter_urls(search_results):
 
 def get_max_version(entries):
     v = max(entry["version_id"] for entry in entries)
-    print("max v:", v)
     return v
 
 
-def check_provider_for_collection(short_name, version, provider):
+def check_provider_for_collection(short_name, provider, version=None):
     """Return `True` if the collection is available for the given provider, otherwise `False`."""
+    
     query_params = build_query_params_str(
         short_name=short_name, version=version, provider=provider
     )
@@ -435,13 +435,13 @@ def get_provider_for_collection(short_name, version):
     """
     cloud_provider = "NSIDC_CPRD"
     in_earthdata_cloud, version = check_provider_for_collection(
-        short_name, version, cloud_provider
+        short_name, cloud_provider, version
     )
     if in_earthdata_cloud:
         return cloud_provider, version
 
     ecs_provider = "NSIDC_ECS"
-    in_ecs, version = check_provider_for_collection(short_name, version, ecs_provider)
+    in_ecs, version = check_provider_for_collection(short_name, ecs_provider, version)
     if in_ecs:
         return ecs_provider, version
 
@@ -454,9 +454,9 @@ def get_provider_for_collection(short_name, version):
 
 def cmr_search(
     short_name,
-    version,
     time_start,
     time_end,
+    version=None,
     bounding_box="",
     polygon="",
     filename_filter="",
@@ -466,7 +466,6 @@ def cmr_search(
     provider, version = get_provider_for_collection(
         short_name=short_name, version=version
     )
-    print("updated version:", version)
     cmr_query_url = build_cmr_query_url(
         provider=provider,
         short_name=short_name,
@@ -545,9 +544,9 @@ def search_and_download(
         if not url_list:
             url_list = cmr_search(
                 short_name,
-                version,
                 time_start,
                 time_end,
+                version=None,
                 bounding_box=bounding_box,
                 polygon=polygon,
                 filename_filter=filename_filter,
@@ -583,6 +582,7 @@ def main(argv=None):
     parser.add_argument(
         "--version",
         type=str,
+        default=None,
         help="If entered, specifies version. Default will look for higheest version number.",
     )
     parser.add_argument(
@@ -618,11 +618,11 @@ def main(argv=None):
     filename_filter = ""
     url_list = []
 
-    short_name = args.short_name if args.short_name else "VNP10A1F"
+    short_name = args.short_name
     version = args.version
-    time_start = args.time_start if args.time_start else "2023-08-01T00:00:00Z"
-    time_end = args.time_end if args.time_end else "2023-08-02T23:59:59Z"
-    bounding_box = args.bounding_box if args.bounding_box else "-150,60,-145,65"
+    time_start = args.time_start
+    time_end = args.time_end
+    bounding_box = args.bounding_box
     polygon = args.polygon
     filename_filter = args.filename_filter
     force = args.force
