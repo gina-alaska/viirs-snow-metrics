@@ -6,8 +6,10 @@ import h5py
 import numpy as np
 import pandas as pd
 from affine import Affine
+import dask.array as da
 
 from preprocess import convert_yyyydoy_to_date
+from luts import data_variables
 
 def parse_date_h5(fp: Path) -> str:
     """Parse the date from an h5 filename.
@@ -106,7 +108,7 @@ def get_data_array_from_h5(file_path, dataset_name):
     with h5py.File(file_path, 'r') as h5_file:
         if dataset_name not in h5_file:
             raise KeyError(f"Dataset '{dataset_name}' not found in the file '{file_path}'")
-        return h5_file[dataset_name][:]
+        return da.array(h5_file[dataset_name][:])
 
 def create_xarray_from_viirs_snow_h5(hdf5_path):
     dataset = xr.open_dataset(
@@ -120,6 +122,30 @@ def create_xarray_from_viirs_snow_h5(hdf5_path):
     dataset = dataset.drop_vars("Projection", errors="ignore")
 
     return dataset
+
+def make_sorted_h5_stack(files, yyyydoy_strings, variable_path):
+    """Create an in-memory raster stack sorted by date.
+
+    This function takes a list of file paths and a list of chronological (pre-sorted)dates in YYYY-DOY format. It first creates a list of files that match the dates in the list. Then, it opens each of these files, reads the raster data from them, and appends it to the raster stack.
+
+    Args:
+       files (list): list of file paths.
+       yyyydoy_strings (list): chronologically sorted dates in YYYY-DOY format.
+
+      Returns:
+         list: list of rasters (i.e. a stack) sorted by date.
+    """
+    # create an in-memory raster stack
+    sorted_files = []
+    for yyyydoy in yyyydoy_strings:
+        for f in files:
+            if yyyydoy == parse_date_h5(f):
+                sorted_files.append(f)
+
+    h5_stack = []
+    for file in sorted_files:
+        h5_stack.append(get_data_array_from_h5(file, variable_path))
+    return h5_stack
 
 def create_single_tile_dataset_from_h5(tile_di, tile):
     """Create a time-indexed netCDF dataset for an entire snow year's worth of data for a single VIIRS tile.
@@ -136,19 +162,45 @@ def create_single_tile_dataset_from_h5(tile_di, tile):
     x_dim, y_dim = extract_coords_from_viirs_snow_h5(reference_h5)
     transform = initialize_transform_h5(x_dim, y_dim)
     crs = create_proj_from_viirs_snow_h5(get_attrs_from_h5(reference_h5))
+
+    dates = [
+        convert_yyyydoy_to_date(parse_date_h5(x))
+        for x in tile_di[tile]
+    ]
+    dates.sort()
+    yyyydoy_strings = [d.strftime("%Y") + d.strftime("%j") for d in dates]
+
+
+    ds_dict = dict()
+    ds_coords = {
+        "time": pd.DatetimeIndex(dates),
+        "x": x_dim.values,
+        "y": y_dim.values, 
+    }
     
-    datasets = []
-    for h5_path in tile_di[tile][:4]:
-        dt = convert_yyyydoy_to_date(parse_date_h5(h5_path))
+    for data_var in data_variables:
+        #logging.info(f"Stacking data for {data_var}...")
+        variable_path=rf"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/{data_var}"
+        raster_stack = make_sorted_h5_stack(
+            tile_di[tile], yyyydoy_strings, variable_path
+        )
+        data_var_dict = {data_var: (["time", "y", "x"], da.array(raster_stack))}
+        ds_dict.update(data_var_dict)
 
-        dataset = create_xarray_from_viirs_snow_h5(h5_path)
+    #datasets = []
+    #for h5_path in tile_di[tile]:
+    #    dt = convert_yyyydoy_to_date(parse_date_h5(h5_path))
 
-        dataset = dataset.expand_dims({'datetime': [dt]})
+    #    dataset = create_xarray_from_viirs_snow_h5(h5_path)
+
+    #    dataset = dataset.expand_dims({'time': [dt]})
         
-        datasets.append(dataset)
+    #    datasets.append(dataset)
+
+    ds = xr.Dataset(ds_dict, coords=ds_coords)
     
-    ds = xr.concat(datasets, dim='datetime')
+    #ds = xr.concat(datasets, dim='time')
     ds.rio.write_crs(crs, inplace=True)
-    ds.rio.set_spatial_dims(x_dim="XDim", y_dim="YDim", inplace=True)
+    ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
     ds.rio.write_transform(transform, inplace=True)
     return ds
