@@ -4,6 +4,8 @@ import shutil
 
 from download import generate_monthly_dl_chunks
 from NSIDC_download import cmr_search, cmr_download
+from luts import parameter_sets, needed_tile_ids
+from h5_utils import parse_tile_h5
 
 class UnitTest(unittest.TestCase):
 
@@ -49,7 +51,7 @@ class UnitTest(unittest.TestCase):
         short_name = 'vnp10a1f'
         time_start = snow_year_chunks[3][0]
         time_end = snow_year_chunks[3][1]
-        bounding_box = '-150,60,-145,65'
+        bounding_box = '-140,66,-139,67'
 
         url_list = cmr_search(
                 short_name,
@@ -59,6 +61,22 @@ class UnitTest(unittest.TestCase):
             )
         cmr_download(url_list[:2], quiet=False, download_dir='./test_dl')
         shutil.rmtree('./test_dl')
+
+    def test_tiles_in_bbox(self):
+        snow_year_chunks = generate_monthly_dl_chunks(2023)
+        short_name = 'vnp10a1f'
+        time_start = snow_year_chunks[3][0]
+        time_end = snow_year_chunks[3][1]
+        bounding_box = parameter_sets['prod_params']['bbox']
+
+        url_list = cmr_search(
+                short_name,
+                time_start,
+                time_end,
+                bounding_box=bounding_box
+            )
+        unique_tiles = set([parse_tile_h5(Path(x)) for x in url_list])
+        self.assertEqual(unique_tiles, needed_tile_ids)
         
 
 
