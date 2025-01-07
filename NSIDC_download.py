@@ -546,7 +546,7 @@ def search_and_download(
                 short_name,
                 time_start,
                 time_end,
-                version=None,
+                version=version,
                 bounding_box=bounding_box,
                 polygon=polygon,
                 filename_filter=filename_filter,
