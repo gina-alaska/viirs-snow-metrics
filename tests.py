@@ -72,7 +72,7 @@ class UnitTest(unittest.TestCase):
         self.assertTrue(initialize_transform_h5(x_dim, y_dim))
         
 
-    def test_create_single_tile_dataset_forom_h5(self):
+    def test_create_single_tile_dataset_from_h5(self):
         src_h5 = Path('/export/datadir/ojlarson_viirs_snow/VIIRS_L3_snow_cover/2022')
         fps_h5 = list_input_files(src_h5, extension='*.h5')
         file_dict_h5 = construct_file_dict_h5(fps_h5)
