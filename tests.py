@@ -1,13 +1,14 @@
 import unittest
 from pathlib import Path
 
-from shared_utils import list_input_files
-from preprocess import construct_file_dict
+from shared_utils import list_input_files, write_single_tile_xrdataset
+from preprocess import construct_file_dict, create_single_tile_dataset, convert_yyyydoy_to_date
 from h5_utils import ( 
     parse_date_h5, parse_tile_h5, construct_file_dict_h5,
     extract_coords_from_viirs_snow_h5, create_proj_from_viirs_snow_h5,
     create_xarray_from_viirs_snow_h5, get_attrs_from_h5,
-    create_single_tile_dataset_from_h5, initialize_transform_h5
+    create_single_tile_dataset_from_h5, initialize_transform_h5,
+    make_sorted_h5_stack
 )
 
 class UnitTest(unittest.TestCase):
@@ -71,13 +72,33 @@ class UnitTest(unittest.TestCase):
         x_dim, y_dim = extract_coords_from_viirs_snow_h5(fp_h5)
         self.assertTrue(initialize_transform_h5(x_dim, y_dim))
         
+    def test_create_single_tile_dataset(self):
+        geotiffs = list_input_files(Path('/export/datadir/ojlarson_viirs_snow/VIIRS_L3_snow_cover/2016'))[:500]
+        geotiff_di = construct_file_dict(geotiffs)
+        tile_ds = create_single_tile_dataset(geotiff_di, 'h11v02')
+        print(tile_ds)
+        self.assertTrue(tile_ds)
 
     def test_create_single_tile_dataset_from_h5(self):
         src_h5 = Path('/export/datadir/ojlarson_viirs_snow/VIIRS_L3_snow_cover/2022')
-        fps_h5 = list_input_files(src_h5, extension='*.h5')
+        fps_h5 = list_input_files(src_h5, extension='*.h5')[:100]
         file_dict_h5 = construct_file_dict_h5(fps_h5)
-        self.assertTrue(create_single_tile_dataset_from_h5(file_dict_h5, 'h11v02'))
+        tile_ds = create_single_tile_dataset_from_h5(file_dict_h5, 'h11v02')
+        print(tile_ds)
+        self.assertTrue(tile_ds)
 
+    def test_make_sorted_h5_stack(self):
+        src_h5 = Path('/export/datadir/ojlarson_viirs_snow/VIIRS_L3_snow_cover/2022')
+        fps_h5 = list_input_files(src_h5, extension='*.h5')[:200]
+        file_dict_h5 = construct_file_dict_h5(fps_h5)
+        dates = [
+            convert_yyyydoy_to_date(parse_date_h5(x))
+            for x in file_dict_h5['h11v02']
+        ]
+        dates.sort()
+        yyyydoy_strings = [d.strftime("%Y") + d.strftime("%j") for d in dates]
+        variable_path=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/CGF_NDSI_Snow_Cover"
+        self.assertTrue(make_sorted_h5_stack(fps_h5, yyyydoy_strings, variable_path))
 
     def tearDown(self):
         """
