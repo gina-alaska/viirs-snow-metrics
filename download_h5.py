@@ -17,10 +17,12 @@ import argparse
 from statistics import mean
 from xml.etree import ElementTree as ET
 from datetime import datetime, timedelta
+from pathlib import Path
 
-from luts import short_name
+from luts import short_name, needed_tile_ids
 from config import viirs_params, snow_year_input_dir, SNOW_YEAR
-from NSIDC_download import search_and_download
+from NSIDC_download import cmr_search, cmr_download
+from h5_utils import parse_tile_h5
 
 from download import wipe_old_downloads, generate_monthly_dl_chunks
 
@@ -31,7 +33,19 @@ def main(short_name):
     for time_chunk in snow_year_chunks:
         print(f"Starting download for {time_chunk}.")
         print(short_name, viirs_params, snow_year_input_dir)
-        search_and_download(short_name, time_chunk[0], time_chunk[1], viirs_params["bbox"], download_dir=snow_year_input_dir)
+        url_list = cmr_search(
+            short_name,
+            time_chunk[0],
+            time_chunk[1],
+            version=None,
+            bounding_box=viirs_params["bbox"])
+        url_subset = []
+        for url in url_list:
+            url_path = Path(url)
+            if parse_tile_h5(url_path) in needed_tile_ids and url_path.suffix != '.xml':
+                url_subset.append(url)
+
+        cmr_download(url_list, download_dir=snow_year_input_dir)
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "input_data_download.log")

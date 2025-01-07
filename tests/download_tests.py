@@ -76,7 +76,6 @@ class UnitTest(unittest.TestCase):
                 time_end,
                 bounding_box=bounding_box
             )
-        unique_tiles = set([parse_tile_h5(Path(x)) for x in url_list])
         start_time = time.time()
         good_tiles = [url for url in url_list if parse_tile_h5(Path(url)) in needed_tile_ids and Path(url).suffix != '.xml']
         print(f"List comprehension: {time.time() - start_time:.4f} seconds")
@@ -92,9 +91,6 @@ class UnitTest(unittest.TestCase):
         unique_tiles = set([parse_tile_h5(Path(x)) for x in good_tiles])
         print(unique_tiles)
         self.assertEqual(unique_tiles, needed_tile_ids)
-
-
-
 
     def tearDown(self):
         """
