@@ -4,6 +4,10 @@ import xarray as xr
 import pyproj
 import h5py
 import numpy as np
+import pandas as pd
+from affine import Affine
+
+from preprocess import convert_yyyydoy_to_date
 
 def parse_date_h5(fp: Path) -> str:
     """Parse the date from an h5 filename.
@@ -44,7 +48,17 @@ def extract_coords_from_viirs_snow_h5(hdf5_path):
     ) as coords:
         return coords["XDim"], coords["YDim"]
 
-def get_attrs_from_h5(dataset_path, dataset_name):
+def initialize_transform_h5(x_dim, y_dim):
+    pixel_size_x = abs(x_dim[1] - x_dim[0])
+    pixel_size_y = abs(y_dim[1] - y_dim[0])
+
+    origin_x = x_dim[0] - (pixel_size_x / 2)
+    origin_y = y_dim[0] + (pixel_size_y / 2)
+
+    transform = Affine(pixel_size_x, 0, origin_x, 0, -pixel_size_y, origin_y)
+    return transform
+
+def get_attrs_from_h5(dataset_path, dataset_name=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/Projection"):
     """Retrieve attributes from a specified dataset in an HDF5 file.
 
     Args:
@@ -79,6 +93,21 @@ def create_proj_from_viirs_snow_h5(spatial_metadata):
     )
     return pyproj.CRS.from_proj4(proj_string)
 
+def get_data_array_from_h5(file_path, dataset_name):
+    """Extracts the data array from a specified dataset in an HDF5 file.
+
+    Args:
+        file_path (str): Path to the HDF5 file.
+        dataset_name (str): Path to the dataset within the file.
+
+    Returns:
+        np.ndarray: The data array from the dataset.
+    """
+    with h5py.File(file_path, 'r') as h5_file:
+        if dataset_name not in h5_file:
+            raise KeyError(f"Dataset '{dataset_name}' not found in the file '{file_path}'")
+        return h5_file[dataset_name][:]
+
 def create_xarray_from_viirs_snow_h5(hdf5_path):
     dataset = xr.open_dataset(
         hdf5_path,
@@ -92,7 +121,7 @@ def create_xarray_from_viirs_snow_h5(hdf5_path):
 
     return dataset
 
-def create_single_tile_dataset_forom_h5(tile_di, tile):
+def create_single_tile_dataset_from_h5(tile_di, tile):
     """Create a time-indexed netCDF dataset for an entire snow year's worth of data for a single VIIRS tile.
 
     Args:
@@ -103,41 +132,23 @@ def create_single_tile_dataset_forom_h5(tile_di, tile):
        xarray.Dataset: The single-tile dataset.
     """
     # assuming all files have same metadata, use first for metadata
-    reference_geotiff = tile_di[tile]["CGF_NDSI_Snow_Cover"][0]
-    transform = initialize_transform(reference_geotiff)
-    lon, lat = initialize_latlon(reference_geotiff)
-    crs = initialize_crs(reference_geotiff)
+    reference_h5 = tile_di[tile][0]
+    x_dim, y_dim = extract_coords_from_viirs_snow_h5(reference_h5)
+    transform = initialize_transform_h5(x_dim, y_dim)
+    crs = create_proj_from_viirs_snow_h5(get_attrs_from_h5(reference_h5))
+    
+    datasets = []
+    for h5_path in tile_di[tile][:4]:
+        dt = convert_yyyydoy_to_date(parse_date_h5(h5_path))
 
-    # timestamps are indentical across variables, use snowcover
-    dates = [
-        convert_yyyydoy_to_date(parse_date(x))
-        for x in tile_di[tile]["CGF_NDSI_Snow_Cover"]
-    ]
-    dates.sort()
-    yyyydoy_strings = [d.strftime("%Y") + d.strftime("%j") for d in dates]
+        dataset = create_xarray_from_viirs_snow_h5(h5_path)
 
-    ds_dict = dict()
-    ds_coords = {
-        "time": pd.DatetimeIndex(dates),
-        "x": lon[0, :],
-        "y": lat[:, 0],
-    }
-
-    # CP note: if testing just use CGF snow [data_variables[1]]
-    for data_var in data_variables:
-        logging.info(f"Stacking data for {data_var}...")
-        raster_stack = make_sorted_raster_stack(
-            tile_di[tile][data_var], yyyydoy_strings
-        )
-        data_var_dict = {data_var: (["time", "y", "x"], da.array(raster_stack))}
-        ds_dict.update(data_var_dict)
-
-    logging.info(f"Creating dataset...")
-    ds = xr.Dataset(ds_dict, coords=ds_coords)
-    logging.info(f"Assigning {crs} as dataset CRS...")
+        dataset = dataset.expand_dims({'datetime': [dt]})
+        
+        datasets.append(dataset)
+    
+    ds = xr.concat(datasets, dim='datetime')
     ds.rio.write_crs(crs, inplace=True)
-    logging.info(f"Assigning {transform} as dataset transform...")
-    ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
+    ds.rio.set_spatial_dims(x_dim="XDim", y_dim="YDim", inplace=True)
     ds.rio.write_transform(transform, inplace=True)
     return ds
-
