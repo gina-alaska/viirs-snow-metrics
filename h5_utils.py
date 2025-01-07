@@ -1,5 +1,9 @@
 from pathlib import Path
 import pickle
+import xarray as xr
+import pyproj
+import h5py
+import numpy as np
 
 def parse_date_h5(fp: Path) -> str:
     """Parse the date from an h5 filename.
@@ -34,8 +38,59 @@ def construct_file_dict_h5(fps):
         pickle.dump(di, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return di
 
-def initialize_transform_h5(h5):
-    pass
+def extract_coords_from_viirs_snow_h5(hdf5_path):
+    with xr.open_dataset(
+        hdf5_path, engine="h5netcdf", group=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D"
+    ) as coords:
+        return coords["XDim"], coords["YDim"]
+
+def get_attrs_from_h5(dataset_path, dataset_name):
+    """Retrieve attributes from a specified dataset in an HDF5 file.
+
+    Args:
+        dataset_path (str): Path to the HDF5 file.
+        dataset_name (str): Path to the dataset within the HDF5 file.
+
+    Returns:
+        dict: A dictionary of attributes from the dataset.
+    """
+    with h5py.File(dataset_path, 'r') as h5_file:
+        if dataset_name not in h5_file:
+            raise KeyError(f"Dataset '{dataset_name}' not found in the file '{dataset_path}'")
+        
+        dataset = h5_file[dataset_name]
+        return {
+            key: (
+                value.item() if isinstance(value, np.ndarray) and value.size == 1
+                else value.tolist() if isinstance(value, np.ndarray)
+                else value.decode('utf-8') if isinstance(value, (np.bytes_, bytes))
+                else value
+            )
+            for key, value in dataset.attrs.items()
+        }
+
+def create_proj_from_viirs_snow_h5(spatial_metadata):
+    proj_string = (
+        f"+proj={spatial_metadata['grid_mapping_name'][:4]} "
+        f"+R={spatial_metadata['earth_radius']} "
+        f"+lon_0={spatial_metadata['longitude_of_central_meridian']} "
+        f"+x_0={spatial_metadata['false_easting']} "
+        f"+y_0={spatial_metadata['false_northing']}"
+    )
+    return pyproj.CRS.from_proj4(proj_string)
+
+def create_xarray_from_viirs_snow_h5(hdf5_path):
+    dataset = xr.open_dataset(
+        hdf5_path,
+        engine="h5netcdf",
+        group=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields",
+        phony_dims="access",
+    )
+    x_dim, y_dim = extract_coords_from_viirs_snow_h5(hdf5_path)
+    dataset = dataset.assign_coords(XDim=x_dim, YDim=y_dim)
+    dataset = dataset.drop_vars("Projection", errors="ignore")
+
+    return dataset
 
 def create_single_tile_dataset_forom_h5(tile_di, tile):
     """Create a time-indexed netCDF dataset for an entire snow year's worth of data for a single VIIRS tile.
