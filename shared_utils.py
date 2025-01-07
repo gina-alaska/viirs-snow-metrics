@@ -9,7 +9,7 @@ from luts import snow_cover_threshold
 from config import SNOW_YEAR, preprocessed_dir
 
 
-def list_input_files(src_dir):
+def list_input_files(src_dir, extension="*.tif"):
     """List all .tif files in the source directory.
 
     Args:
@@ -18,7 +18,7 @@ def list_input_files(src_dir):
     Returns:
        list: A list of all .tif files in the source directory.
     """
-    fps = [x for x in src_dir.glob("*.tif")]
+    fps = [x for x in src_dir.glob(extension)]
     logging.info(f"Downloaded file count is {len(fps)}.")
     logging.info(f"Files that will be included in dataset: {fps}.")
     return fps
