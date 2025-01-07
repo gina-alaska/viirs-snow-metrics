@@ -115,7 +115,7 @@ def generate_monthly_dl_chunks(snow_year):
     """
     intervals = []
     for month in range(1, 13):
-        year = snow_year if month >= 8 else snow_year + 1
+        year = snow_year - 1 if month >= 8 else snow_year
         start_date = datetime(year, month, 1)
         _, last_day = calendar.monthrange(year, month)
         end_date = datetime(year, month, last_day, 23, 59, 59)
