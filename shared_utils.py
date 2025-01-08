@@ -4,6 +4,7 @@ import pickle
 
 import xarray as xr
 import rasterio as rio
+from datetime import datetime, timedelta
 
 from luts import snow_cover_threshold
 from config import SNOW_YEAR, preprocessed_dir
@@ -22,6 +23,20 @@ def list_input_files(src_dir, extension="*.tif"):
     logging.info(f"Downloaded file count is {len(fps)}.")
     logging.info(f"Files that will be included in dataset: {fps}.")
     return fps
+
+
+def convert_yyyydoy_to_date(doy_str):
+    """Convert a YYYY-DOY string to a datetime object that can be used as an xr.DataSet time index.
+
+    Args:
+       doy_str (str): The date in YYYY-DOY format.
+
+    Returns:
+       date: date object (e.g., datetime.date(2019, 12, 4))
+    """
+    year, doy = int(doy_str[0:4]), int(doy_str[-3:])
+    date = datetime(year, 1, 1) + timedelta(days=doy - 1)
+    return date.date()
 
 
 def parse_tile(fp):

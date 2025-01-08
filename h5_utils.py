@@ -8,7 +8,7 @@ import pandas as pd
 from affine import Affine
 import dask.array as da
 
-from preprocess import convert_yyyydoy_to_date
+from shared_utils import convert_yyyydoy_to_date
 from luts import data_variables
 
 def parse_date_h5(fp: Path) -> str:

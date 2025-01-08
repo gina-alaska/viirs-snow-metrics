@@ -4,7 +4,7 @@ import argparse
 import logging
 import pickle
 import os
-from datetime import datetime, timedelta
+
 
 import xarray as xr
 import rasterio as rio
@@ -15,7 +15,7 @@ import dask.array as da
 
 from config import snow_year_input_dir
 from luts import data_variables
-from shared_utils import parse_tile, list_input_files, write_single_tile_xrdataset
+from shared_utils import parse_tile, list_input_files, write_single_tile_xrdataset, convert_yyyydoy_to_date
 
 
 def parse_date(fp):
@@ -51,20 +51,6 @@ def parse_satellite(fp):
        str: Satellite extracted from the filename.
     """
     return fp.name.split("_")[0]
-
-
-def convert_yyyydoy_to_date(doy_str):
-    """Convert a YYYY-DOY string to a datetime object that can be used as an xr.DataSet time index.
-
-    Args:
-       doy_str (str): The date in YYYY-DOY format.
-
-    Returns:
-       date: date object (e.g., datetime.date(2019, 12, 4))
-    """
-    year, doy = int(doy_str[0:4]), int(doy_str[-3:])
-    date = datetime(year, 1, 1) + timedelta(days=doy - 1)
-    return date.date()
 
 
 def construct_file_dict(fps):
