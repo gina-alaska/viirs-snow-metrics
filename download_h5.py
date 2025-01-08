@@ -26,6 +26,7 @@ from h5_utils import parse_tile_h5
 
 from download import wipe_old_downloads, generate_monthly_dl_chunks
 
+
 def main(short_name):
     wipe_old_downloads(snow_year_input_dir)
     snow_year_chunks = generate_monthly_dl_chunks(int(SNOW_YEAR))
@@ -38,21 +39,27 @@ def main(short_name):
             time_chunk[0],
             time_chunk[1],
             version=None,
-            bounding_box=viirs_params["bbox"])
+            bounding_box=viirs_params["bbox"],
+        )
         url_subset = []
         for url in url_list:
             url_path = Path(url)
-            if parse_tile_h5(url_path) in needed_tile_ids and url_path.suffix != '.xml':
+            if parse_tile_h5(url_path) in needed_tile_ids and url_path.suffix != ".xml":
                 url_subset.append(url)
 
         cmr_download(url_list, download_dir=snow_year_input_dir)
+
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "input_data_download.log")
     logging.basicConfig(filename=log_file_path, level=logging.INFO)
 
     parser = argparse.ArgumentParser(description="Download Script - HDF5")
-    parser.add_argument("--short_name", type=str, help="Dataset short name - will overwrite short_name from luts if used.")
+    parser.add_argument(
+        "--short_name",
+        type=str,
+        help="Dataset short name - will overwrite short_name from luts if used.",
+    )
     args = parser.parse_args()
     if args.short_name:
         short_name = args.short_name

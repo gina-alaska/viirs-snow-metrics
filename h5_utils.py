@@ -8,6 +8,7 @@ import pandas as pd
 from affine import Affine
 import dask.array as da
 
+
 def parse_date_h5(fp: Path) -> str:
     """Parse the date from an h5 filename.
     Args:
@@ -18,6 +19,7 @@ def parse_date_h5(fp: Path) -> str:
     """
     return fp.name.split(".")[1][1:]
 
+
 def parse_tile_h5(fp: Path) -> str:
     """Parse the tile ID from an h5 filename.
     Args:
@@ -27,6 +29,7 @@ def parse_tile_h5(fp: Path) -> str:
        str: The tile ID (i.e. 'h11v02') extracted from the filename.
     """
     return fp.name.split(".")[2]
+
 
 def construct_file_dict_h5(fps: list) -> dict:
     """Construct a dict mapping tiles and data variables to file paths.
@@ -48,6 +51,7 @@ def construct_file_dict_h5(fps: list) -> dict:
         pickle.dump(di, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return di
 
+
 def extract_coords_from_viirs_snow_h5(hdf5_path: Path) -> tuple:
     """Extract data arrays of coordinates from a VIIRS snow h5 dataset.
 
@@ -62,6 +66,7 @@ def extract_coords_from_viirs_snow_h5(hdf5_path: Path) -> tuple:
     ) as coords:
         return coords["XDim"], coords["YDim"]
 
+
 def initialize_transform_h5(x_dim, y_dim):
     pixel_size_x = abs(x_dim[1] - x_dim[0])
     pixel_size_y = abs(y_dim[1] - y_dim[0])
@@ -72,7 +77,10 @@ def initialize_transform_h5(x_dim, y_dim):
     transform = Affine(pixel_size_x, 0, origin_x, 0, -pixel_size_y, origin_y)
     return transform
 
-def get_attrs_from_h5(dataset_path, dataset_name=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/Projection"):
+
+def get_attrs_from_h5(
+    dataset_path, dataset_name=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/Projection"
+):
     """Retrieve attributes from a specified dataset in an HDF5 file.
 
     Args:
@@ -82,20 +90,30 @@ def get_attrs_from_h5(dataset_path, dataset_name=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_
     Returns:
         (dict): A dictionary of attributes from the dataset.
     """
-    with h5py.File(dataset_path, 'r') as h5_file:
+    with h5py.File(dataset_path, "r") as h5_file:
         if dataset_name not in h5_file:
-            raise KeyError(f"Dataset '{dataset_name}' not found in the file '{dataset_path}'")
-        
+            raise KeyError(
+                f"Dataset '{dataset_name}' not found in the file '{dataset_path}'"
+            )
+
         dataset = h5_file[dataset_name]
         return {
             key: (
-                value.item() if isinstance(value, np.ndarray) and value.size == 1
-                else value.tolist() if isinstance(value, np.ndarray)
-                else value.decode('utf-8') if isinstance(value, (np.bytes_, bytes))
-                else value
+                value.item()
+                if isinstance(value, np.ndarray) and value.size == 1
+                else (
+                    value.tolist()
+                    if isinstance(value, np.ndarray)
+                    else (
+                        value.decode("utf-8")
+                        if isinstance(value, (np.bytes_, bytes))
+                        else value
+                    )
+                )
             )
             for key, value in dataset.attrs.items()
         }
+
 
 def create_proj_from_viirs_snow_h5(spatial_metadata: dict) -> pyproj.CRS:
     """Create a coordinate reference system (CRS) from VIIRS snow dataset metadata.
@@ -115,6 +133,7 @@ def create_proj_from_viirs_snow_h5(spatial_metadata: dict) -> pyproj.CRS:
     )
     return pyproj.CRS.from_proj4(proj_string)
 
+
 def get_data_array_from_h5(file_path: Path, dataset_name: str) -> da.Array:
     """Extracts the data array from a specified dataset in an HDF5 file.
 
@@ -125,10 +144,13 @@ def get_data_array_from_h5(file_path: Path, dataset_name: str) -> da.Array:
     Returns:
         (da.Array): The dask data array from the dataset.
     """
-    with h5py.File(file_path, 'r') as h5_file:
+    with h5py.File(file_path, "r") as h5_file:
         if dataset_name not in h5_file:
-            raise KeyError(f"Dataset '{dataset_name}' not found in the file '{file_path}'")
-        return da.array(h5_file[dataset_name][:])
+            raise KeyError(
+                f"Dataset '{dataset_name}' not found in the file '{file_path}'"
+            )
+        return da.from_array(h5_file[dataset_name])
+
 
 def create_xarray_from_viirs_snow_h5(hdf5_path: Path) -> xr.Dataset:
     """Create an xarray Dataset from a VIIRS snow .h5 file.
@@ -151,7 +173,10 @@ def create_xarray_from_viirs_snow_h5(hdf5_path: Path) -> xr.Dataset:
 
     return dataset
 
-def make_sorted_h5_stack(files: list, yyyydoy_strings:list, variable_path:str) -> list:
+
+def make_sorted_h5_stack(
+    files: list, yyyydoy_strings: list, variable_path: str
+) -> list:
     """Create an in-memory raster stack sorted by date.
 
     This function takes a list of file paths and a list of chronological (pre-sorted)dates in YYYY-DOY format. It first creates a list of files that match the dates in the list. Then, it opens each of these files, reads the raster data from them, and appends it to the raster stack.
@@ -175,4 +200,3 @@ def make_sorted_h5_stack(files: list, yyyydoy_strings:list, variable_path:str) -
     for file in sorted_files:
         h5_stack.append(get_data_array_from_h5(file, variable_path))
     return h5_stack
-

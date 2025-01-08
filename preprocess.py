@@ -15,7 +15,12 @@ import dask.array as da
 
 from config import snow_year_input_dir
 from luts import data_variables
-from shared_utils import parse_tile, list_input_files, write_single_tile_xrdataset, convert_yyyydoy_to_date
+from shared_utils import (
+    parse_tile,
+    list_input_files,
+    write_single_tile_xrdataset,
+    convert_yyyydoy_to_date,
+)
 
 
 def parse_date(fp):

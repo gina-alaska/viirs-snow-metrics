@@ -24,67 +24,62 @@ class UnitTest(unittest.TestCase):
 
     def test_cms_search(self):
         snow_year_chunks = generate_monthly_dl_chunks(2023)
-        short_name = 'vnp10a1f'
+        short_name = "vnp10a1f"
         time_start = snow_year_chunks[3][0]
         time_end = snow_year_chunks[3][1]
-        bounding_box = '-150,60,-145,65'
+        bounding_box = "-150,60,-145,65"
 
         url_list = cmr_search(
-                short_name,
-                time_start,
-                time_end,
-                bounding_box=bounding_box
-            )
+            short_name, time_start, time_end, bounding_box=bounding_box
+        )
         self.assertEqual(len(url_list), 360)
-        self.assertIn('VNP10A1F', url_list[0])
-        short_name = 'VJ110a1f'
+        self.assertIn("VNP10A1F", url_list[0])
+        short_name = "VJ110a1f"
         url_list = cmr_search(
-                short_name,
-                time_start,
-                time_end,
-                bounding_box=bounding_box
-            )
+            short_name, time_start, time_end, bounding_box=bounding_box
+        )
         self.assertEqual(len(url_list), 360)
-        self.assertIn('VJ110A1F', url_list[0])
+        self.assertIn("VJ110A1F", url_list[0])
 
     def test_cmr_download(self):
         snow_year_chunks = generate_monthly_dl_chunks(2023)
-        short_name = 'vnp10a1f'
+        short_name = "vnp10a1f"
         time_start = snow_year_chunks[3][0]
         time_end = snow_year_chunks[3][1]
-        bounding_box = '-140,66,-139,67'
+        bounding_box = "-140,66,-139,67"
 
         url_list = cmr_search(
-                short_name,
-                time_start,
-                time_end,
-                bounding_box=bounding_box
-            )
-        cmr_download(url_list[:2], quiet=False, download_dir='./test_dl')
-        shutil.rmtree('./test_dl')
+            short_name, time_start, time_end, bounding_box=bounding_box
+        )
+        self.assertTrue(
+            cmr_download(url_list[:2], quiet=False, download_dir="./test_dl")
+        )
+        shutil.rmtree("./test_dl")
 
     def test_tiles_in_bbox(self):
         snow_year_chunks = generate_monthly_dl_chunks(2023)
-        short_name = 'vnp10a1f'
+        short_name = "vnp10a1f"
         time_start = snow_year_chunks[3][0]
         time_end = snow_year_chunks[3][1]
-        bounding_box = parameter_sets['prod_params']['bbox']
+        bounding_box = parameter_sets["prod_params"]["bbox"]
 
         url_list = cmr_search(
-                short_name,
-                time_start,
-                time_end,
-                bounding_box=bounding_box
-            )
+            short_name, time_start, time_end, bounding_box=bounding_box
+        )
         start_time = time.time()
-        good_tiles = [url for url in url_list if parse_tile_h5(Path(url)) in needed_tile_ids and Path(url).suffix != '.xml']
+        good_tiles = [
+            url
+            for url in url_list
+            if parse_tile_h5(Path(url)) in needed_tile_ids
+            and Path(url).suffix != ".xml"
+        ]
         print(f"List comprehension: {time.time() - start_time:.4f} seconds")
 
         start_time = time.time()
         good_tiles = []
         for x in url_list:
             path_x = Path(x)
-            if parse_tile_h5(path_x) in needed_tile_ids and path_x.suffix != '.xml':
+            if parse_tile_h5(path_x) in needed_tile_ids and path_x.suffix != ".xml":
                 good_tiles.append(x)
         print(f"Manual append: {time.time() - start_time:.4f} seconds")
 

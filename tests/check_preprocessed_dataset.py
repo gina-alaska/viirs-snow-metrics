@@ -27,7 +27,10 @@ class UnitTest(unittest.TestCase):
 
         print(h5_date, h5_tile_id)
 
-        h5_data = get_data_array_from_h5(random_h5, r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/CGF_NDSI_Snow_Cover")
+        h5_data = get_data_array_from_h5(
+            random_h5,
+            r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/CGF_NDSI_Snow_Cover",
+        )
         print(h5_data)
 
         fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{h5_tile_id}.nc"
@@ -35,10 +38,10 @@ class UnitTest(unittest.TestCase):
             fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
         )
         print(snow_ds)
-        ds_arr=snow_ds.sel(time=h5_date).all()
+        ds_arr = snow_ds.sel(time=h5_date).all()
         print(ds_arr)
         self.assertEqual(h5_data, ds_arr)
 
+
 if __name__ == "__main__":
     unittest.main()
-
