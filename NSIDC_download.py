@@ -397,7 +397,7 @@ def get_max_version(entries):
 
 def check_provider_for_collection(short_name, provider, version=None):
     """Return `True` if the collection is available for the given provider, otherwise `False`."""
-    
+
     query_params = build_query_params_str(
         short_name=short_name, version=version, provider=provider
     )
@@ -552,19 +552,6 @@ def search_and_download(
                 filename_filter=filename_filter,
                 quiet=quiet,
             )
-        # print(
-        #    short_name,
-        #    time_start,
-        #    time_end,
-        #    bounding_box,
-        #    version,
-        #    polygon,
-        #    filename_filter,
-        #    quiet,
-        #    force,
-        #    url_list,
-        #    download_dir,
-        # )
         cmr_download(url_list, force=force, quiet=quiet, download_dir=download_dir)
     except KeyboardInterrupt:
         quit()
