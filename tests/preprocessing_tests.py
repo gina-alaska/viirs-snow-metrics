@@ -1,15 +1,15 @@
 import unittest
 from pathlib import Path
 
-from shared_utils import list_input_files, write_single_tile_xrdataset
-from preprocess import construct_file_dict, create_single_tile_dataset, convert_yyyydoy_to_date
+from shared_utils import list_input_files, convert_yyyydoy_to_date
+from preprocess import construct_file_dict, create_single_tile_dataset
 from h5_utils import ( 
     parse_date_h5, parse_tile_h5, construct_file_dict_h5,
     extract_coords_from_viirs_snow_h5, create_proj_from_viirs_snow_h5,
     create_xarray_from_viirs_snow_h5, get_attrs_from_h5,
-    create_single_tile_dataset_from_h5, initialize_transform_h5,
-    make_sorted_h5_stack
+    initialize_transform_h5, make_sorted_h5_stack
 )
+from preprocess_h5 import create_single_tile_dataset_from_h5
 
 class UnitTest(unittest.TestCase):
 

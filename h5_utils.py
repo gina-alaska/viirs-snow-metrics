@@ -8,9 +8,6 @@ import pandas as pd
 from affine import Affine
 import dask.array as da
 
-from shared_utils import convert_yyyydoy_to_date
-from luts import data_variables
-
 def parse_date_h5(fp: Path) -> str:
     """Parse the date from an h5 filename.
     Args:
@@ -22,9 +19,16 @@ def parse_date_h5(fp: Path) -> str:
     return fp.name.split(".")[1][1:]
 
 def parse_tile_h5(fp: Path) -> str:
+    """Parse the tile ID from an h5 filename.
+    Args:
+       fp (Path): The file path object.
+
+    Returns:
+       str: The tile ID (i.e. 'h11v02') extracted from the filename.
+    """
     return fp.name.split(".")[2]
 
-def construct_file_dict_h5(fps):
+def construct_file_dict_h5(fps: list) -> dict:
     """Construct a dict mapping tiles and data variables to file paths.
 
     Args:
@@ -44,7 +48,15 @@ def construct_file_dict_h5(fps):
         pickle.dump(di, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return di
 
-def extract_coords_from_viirs_snow_h5(hdf5_path):
+def extract_coords_from_viirs_snow_h5(hdf5_path: Path) -> tuple:
+    """Extract data arrays of coordinates from a VIIRS snow h5 dataset.
+
+    Args:
+        hdf5_path (Path): File path to h5 file.
+
+    Returns:
+        (tuple): x and y coordinate data arrays.
+    """
     with xr.open_dataset(
         hdf5_path, engine="h5netcdf", group=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D"
     ) as coords:
@@ -68,7 +80,7 @@ def get_attrs_from_h5(dataset_path, dataset_name=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_
         dataset_name (str): Path to the dataset within the HDF5 file.
 
     Returns:
-        dict: A dictionary of attributes from the dataset.
+        (dict): A dictionary of attributes from the dataset.
     """
     with h5py.File(dataset_path, 'r') as h5_file:
         if dataset_name not in h5_file:
@@ -85,7 +97,15 @@ def get_attrs_from_h5(dataset_path, dataset_name=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_
             for key, value in dataset.attrs.items()
         }
 
-def create_proj_from_viirs_snow_h5(spatial_metadata):
+def create_proj_from_viirs_snow_h5(spatial_metadata: dict) -> pyproj.CRS:
+    """Create a coordinate reference system (CRS) from VIIRS snow dataset metadata.
+
+    Args:
+        spatial_metadata (dict): Dictionary containing spatial metadata keys extracted from the 'Projection' dataset of a VIIRS snow h5.
+
+    Returns:
+        (pyproj.CRS): A coordinate reference system object created from the spatial metadata.
+    """
     proj_string = (
         f"+proj={spatial_metadata['grid_mapping_name'][:4]} "
         f"+R={spatial_metadata['earth_radius']} "
@@ -95,22 +115,30 @@ def create_proj_from_viirs_snow_h5(spatial_metadata):
     )
     return pyproj.CRS.from_proj4(proj_string)
 
-def get_data_array_from_h5(file_path, dataset_name):
+def get_data_array_from_h5(file_path: Path, dataset_name: str) -> da.Array:
     """Extracts the data array from a specified dataset in an HDF5 file.
 
     Args:
-        file_path (str): Path to the HDF5 file.
+        file_path (Path): Path to the HDF5 file.
         dataset_name (str): Path to the dataset within the file.
 
     Returns:
-        np.ndarray: The data array from the dataset.
+        (da.Array): The dask data array from the dataset.
     """
     with h5py.File(file_path, 'r') as h5_file:
         if dataset_name not in h5_file:
             raise KeyError(f"Dataset '{dataset_name}' not found in the file '{file_path}'")
         return da.array(h5_file[dataset_name][:])
 
-def create_xarray_from_viirs_snow_h5(hdf5_path):
+def create_xarray_from_viirs_snow_h5(hdf5_path: Path) -> xr.Dataset:
+    """Create an xarray Dataset from a VIIRS snow .h5 file.
+
+    Args:
+        hdf5_path (Path): File path to the .h5 file.
+
+    Returns:
+        (xr.Dataset): An xarray dataset with coordinates assigned and projection dropped.
+    """
     dataset = xr.open_dataset(
         hdf5_path,
         engine="h5netcdf",
@@ -123,7 +151,7 @@ def create_xarray_from_viirs_snow_h5(hdf5_path):
 
     return dataset
 
-def make_sorted_h5_stack(files, yyyydoy_strings, variable_path):
+def make_sorted_h5_stack(files: list, yyyydoy_strings:list, variable_path:str) -> list:
     """Create an in-memory raster stack sorted by date.
 
     This function takes a list of file paths and a list of chronological (pre-sorted)dates in YYYY-DOY format. It first creates a list of files that match the dates in the list. Then, it opens each of these files, reads the raster data from them, and appends it to the raster stack.
@@ -131,6 +159,7 @@ def make_sorted_h5_stack(files, yyyydoy_strings, variable_path):
     Args:
        files (list): list of file paths.
        yyyydoy_strings (list): chronologically sorted dates in YYYY-DOY format.
+       variable_path (str): The path to the specific variable (i.e. r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/CGF_NDSI_Snow_Cover")
 
       Returns:
          list: list of rasters (i.e. a stack) sorted by date.
@@ -147,60 +176,3 @@ def make_sorted_h5_stack(files, yyyydoy_strings, variable_path):
         h5_stack.append(get_data_array_from_h5(file, variable_path))
     return h5_stack
 
-def create_single_tile_dataset_from_h5(tile_di, tile):
-    """Create a time-indexed netCDF dataset for an entire snow year's worth of data for a single VIIRS tile.
-
-    Args:
-       tile_di (dict): A dictionary mapping tiles and data variables to file paths.
-       tile (str): The tile to create the dataset for.
-
-    Returns:
-       xarray.Dataset: The single-tile dataset.
-    """
-    # assuming all files have same metadata, use first for metadata
-    reference_h5 = tile_di[tile][0]
-    x_dim, y_dim = extract_coords_from_viirs_snow_h5(reference_h5)
-    transform = initialize_transform_h5(x_dim, y_dim)
-    crs = create_proj_from_viirs_snow_h5(get_attrs_from_h5(reference_h5))
-
-    dates = [
-        convert_yyyydoy_to_date(parse_date_h5(x))
-        for x in tile_di[tile]
-    ]
-    dates.sort()
-    yyyydoy_strings = [d.strftime("%Y") + d.strftime("%j") for d in dates]
-
-
-    ds_dict = dict()
-    ds_coords = {
-        "time": pd.DatetimeIndex(dates),
-        "x": x_dim.values,
-        "y": y_dim.values, 
-    }
-    
-    for data_var in data_variables:
-        #logging.info(f"Stacking data for {data_var}...")
-        variable_path=rf"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/{data_var}"
-        raster_stack = make_sorted_h5_stack(
-            tile_di[tile], yyyydoy_strings, variable_path
-        )
-        data_var_dict = {data_var: (["time", "y", "x"], da.array(raster_stack))}
-        ds_dict.update(data_var_dict)
-
-    #datasets = []
-    #for h5_path in tile_di[tile]:
-    #    dt = convert_yyyydoy_to_date(parse_date_h5(h5_path))
-
-    #    dataset = create_xarray_from_viirs_snow_h5(h5_path)
-
-    #    dataset = dataset.expand_dims({'time': [dt]})
-        
-    #    datasets.append(dataset)
-
-    ds = xr.Dataset(ds_dict, coords=ds_coords)
-    
-    #ds = xr.concat(datasets, dim='time')
-    ds.rio.write_crs(crs, inplace=True)
-    ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
-    ds.rio.write_transform(transform, inplace=True)
-    return ds
