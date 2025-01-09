@@ -5,6 +5,7 @@ import logging
 import os
 
 import numpy as np
+import xarray as xr
 from dask.distributed import Client
 
 from config import SNOW_YEAR, preprocessed_dir, mask_dir
@@ -88,13 +89,18 @@ def combine_masks(mask_list):
         xarray.DataArray: The combined mask of grid cells.
     """
     logging.info("Combining masks...")
-    masks_combined = np.all(mask_list, axis=0)
+    # masks_combined = np.all(mask_list, axis=0) ## Returned np.Array - revised to return xr.DataArray
+    masks_combined = xr.concat(mask_list, dim="temp_dim").all(dim="temp_dim")
     return masks_combined
 
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "mask_computation.log")
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
 
     parser = argparse.ArgumentParser(description="Script to Generate Masks")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
@@ -114,12 +120,12 @@ if __name__ == "__main__":
 
     mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0})
     write_tagged_geotiff(
-        mask_dir, tile_id, "_mask", "ocean", mask_profile, ocean_mask.values
+        mask_dir, tile_id, "mask", "ocean", mask_profile, ocean_mask.values
     )
     write_tagged_geotiff(
         mask_dir,
         tile_id,
-        "_mask",
+        "mask",
         "inland_water",
         mask_profile,
         inland_water_mask.values,
@@ -127,13 +133,18 @@ if __name__ == "__main__":
     write_tagged_geotiff(
         mask_dir,
         tile_id,
-        "_mask",
+        "mask",
         "l2_fill",
         mask_profile,
         l2_mask.values,
     )
     write_tagged_geotiff(
-        mask_dir, tile_id, "_mask", "combined", mask_profile, combined_mask
+        mask_dir,
+        tile_id,
+        "mask",
+        "combined",
+        mask_profile,
+        combined_mask.values,
     )
     ds.close()
     client.close()
