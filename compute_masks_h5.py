@@ -22,26 +22,36 @@ from compute_masks import (
 )
 from h5_utils import write_tagged_geotiff_from_data_array
 
+def process_masks(ds):
+    
+    ocean_mask = generate_ocean_mask(ds)
+    ocean_mask.name = "ocean_mask"
+    ocean_mask.rio.set_nodata(0, inplace=True)
+
+    inland_water_mask = generate_inland_water_mask(ds)
+    inland_water_mask.name = "inland_water_mask"
+    inland_water_mask.rio.set_nodata(0, inplace=True)
+
+    l2_mask = generate_l2fill_mask(ds)
+    l2_mask.name = "l2_fill_mask"
+    l2_mask.rio.set_nodata(0, inplace=True)
+
+    combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
+    combined_mask.name = "combined_mask"
+    combined_mask.rio.set_nodata(0, inplace=True)
+
+    return ocean_mask, inland_water_mask, l2_mask, combined_mask
+
 
 def main(tile_id, input_dir, output_dir, year):
 
+    client = Client(n_workers=24)
     fp = input_dir / f"snow_year_{year}_{tile_id}.nc"
     ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
     )
 
-    ocean_mask = generate_ocean_mask(ds)
-    ocean_mask.name = "ocean_mask"
-    ocean_mask.rio.set_nodata(0, inplace=True)
-    inland_water_mask = generate_inland_water_mask(ds)
-    inland_water_mask.name = "inland_water_mask"
-    inland_water_mask.rio.set_nodata(0, inplace=True)
-    l2_mask = generate_l2fill_mask(ds)
-    l2_mask.name = "l2_fill_mask"
-    l2_mask.rio.set_nodata(0, inplace=True)
-    combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
-    combined_mask.name = "combined_mask"
-    combined_mask.rio.set_nodata(0, inplace=True)
+    ocean_mask, inland_water_mask, l2_mask, combined_mask = process_masks(ds)
 
     write_tagged_geotiff_from_data_array(
         output_dir, tile_id, "mask", "ocean", year, ocean_mask, nodata=0
@@ -57,8 +67,9 @@ def main(tile_id, input_dir, output_dir, year):
     )
 
     ds.close()
+    client.close()
 
-    return ocean_mask, inland_water_mask, l2_mask, combined_mask
+    return None
 
 
 if __name__ == "__main__":
@@ -75,8 +86,6 @@ if __name__ == "__main__":
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
 
-    client = Client(n_workers=24)
     main(tile_id, preprocessed_dir, mask_dir, SNOW_YEAR)
 
-    client.close()
     logging.info(f"Mask Generation Script Complete, GeoTIFFs written to {mask_dir}")
