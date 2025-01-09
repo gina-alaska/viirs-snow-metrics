@@ -83,7 +83,7 @@ def write_single_tile_xrdataset(ds, tile, suffix=None):
         filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}_{suffix}.nc"
     else:
         filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}.nc"
-    ds.to_netcdf(filename, engine="netcdf4")
+    ds.to_netcdf(filename)#, engine="netcdf4") ## Working without this - should choose engine on it's own
     logging.info(f"NetCDF dataset for tile {tile} wriiten to {filename}.")
 
 
