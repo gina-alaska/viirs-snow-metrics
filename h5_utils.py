@@ -68,11 +68,11 @@ def extract_coords_from_viirs_snow_h5(hdf5_path: Path) -> tuple:
 
 
 def initialize_transform_h5(x_dim, y_dim):
-    pixel_size_x = abs(x_dim[1] - x_dim[0])
-    pixel_size_y = abs(y_dim[1] - y_dim[0])
+    pixel_size_x = float(abs(x_dim[1] - x_dim[0]))
+    pixel_size_y = float(y_dim[1] - y_dim[0])
 
-    origin_x = x_dim[0] - (pixel_size_x / 2)
-    origin_y = y_dim[0] + (pixel_size_y / 2)
+    origin_x = float(x_dim[0] - (pixel_size_x / 2))
+    origin_y = float(y_dim[0] + (pixel_size_y / 2))
 
     transform = Affine(pixel_size_x, 0, origin_x, 0, -pixel_size_y, origin_y)
     return transform
@@ -204,13 +204,33 @@ def make_sorted_h5_stack(
         h5_stack.append(get_data_array_from_h5(file, variable_path, lazy))
     return h5_stack
 
+
 def convert_data_array_to_geotiff(data_array, output_path, **kwargs):
     print(f"Exporting {data_array.name} as {output_path.name}...")
     data_array.rio.to_raster(
-        output_path,
-        driver="GTiff",
-        compress="LZW",
-        tiled=True,
-        dtype="uint8",
-        **kwargs
+        output_path, driver="GTiff", compress="LZW", tiled=True, dtype="uint8", **kwargs
     )
+
+
+def write_tagged_geotiff_from_data_array(
+    dst_dir, tile_id, tag_name, tag_value, year, arr, **kwargs
+):
+    """Write data to a GeoTIFF file.
+
+    Not for multiband or multi-tile GeoTIFFs. Use for masks, single metrics, and other intermediate data products.
+
+    Args:
+        dst_dir (Path): Output directory for the GeoTIFF
+        tile_id (str): The tile identifier.
+        tag_name (str): The name of the metadata tag.
+        tag_value (str): Value of the metadata tag.
+        year (int): THe Snow Year.
+        arr (numpy.ndarray): The mask array.
+        **kwargs: Options passed to rio.to_raster()
+
+    Returns:
+        None
+    """
+    out_fp = dst_dir / f"{tile_id}_{tag_name}_{tag_value}_{year}.tif"
+    convert_data_array_to_geotiff(arr, out_fp, **kwargs)
+    return None
