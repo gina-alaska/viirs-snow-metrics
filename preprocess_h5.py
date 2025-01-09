@@ -54,10 +54,13 @@ def create_single_tile_dataset_from_h5(tile_di, tile):
     for data_var in data_variables:
         # logging.info(f"Stacking data for {data_var}...")
         variable_path = rf"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/{data_var}"
-        raster_stack = make_sorted_h5_stack(
+        # Use lazy=True in make_sorted_h5_stack to return a stck of dask arrays, and the line below to restack them
+        # Not yet configured to work with writing to NetCDF, but would be faster if possible to fix that
+        h5_stack = make_sorted_h5_stack(
             tile_di[tile], yyyydoy_strings, variable_path
-        )
-        data_var_dict = {data_var: (["time", "y", "x"], da.array(raster_stack))}
+        )  
+        data_var_dict = {data_var: (["time", "y", "x"], da.array(h5_stack))}
+        #data_var_dict = {data_var: (["time", "y", "x"], da.stack(h5_stack, axis=0).rechunk({0: len(h5_stack)}))}
         ds_dict.update(data_var_dict)
 
     ds = xr.Dataset(ds_dict, coords=ds_coords)
@@ -78,11 +81,9 @@ if __name__ == "__main__":
     tile_id = args.tile_id
 
     logging.info(f"Creating preprocessed dataset for tile {tile_id}...")
-    print(snow_year_input_dir)
 
     h5_paths = list_input_files(snow_year_input_dir, extension="*.h5")
     h5_dict = construct_file_dict_h5(h5_paths)
-    print(len(h5_paths))
     tile_ds = create_single_tile_dataset_from_h5(h5_dict, tile_id)
     write_single_tile_xrdataset(tile_ds, tile_id)
 

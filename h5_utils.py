@@ -134,7 +134,7 @@ def create_proj_from_viirs_snow_h5(spatial_metadata: dict) -> pyproj.CRS:
     return pyproj.CRS.from_proj4(proj_string)
 
 
-def get_data_array_from_h5(file_path: Path, dataset_name: str) -> da.Array:
+def get_data_array_from_h5(file_path: Path, dataset_name: str, lazy=False) -> da.Array:
     """Extracts the data array from a specified dataset in an HDF5 file.
 
     Args:
@@ -149,7 +149,10 @@ def get_data_array_from_h5(file_path: Path, dataset_name: str) -> da.Array:
             raise KeyError(
                 f"Dataset '{dataset_name}' not found in the file '{file_path}'"
             )
-        return da.from_array(h5_file[dataset_name])
+        if lazy:
+            return da.from_array(h5_file[dataset_name])
+        else:
+            return h5_file[dataset_name][:]
 
 
 def create_xarray_from_viirs_snow_h5(hdf5_path: Path) -> xr.Dataset:
@@ -175,7 +178,7 @@ def create_xarray_from_viirs_snow_h5(hdf5_path: Path) -> xr.Dataset:
 
 
 def make_sorted_h5_stack(
-    files: list, yyyydoy_strings: list, variable_path: str
+    files: list, yyyydoy_strings: list, variable_path: str, lazy=False
 ) -> list:
     """Create an in-memory raster stack sorted by date.
 
@@ -198,5 +201,5 @@ def make_sorted_h5_stack(
 
     h5_stack = []
     for file in sorted_files:
-        h5_stack.append(get_data_array_from_h5(file, variable_path))
+        h5_stack.append(get_data_array_from_h5(file, variable_path, lazy))
     return h5_stack
