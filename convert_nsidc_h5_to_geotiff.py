@@ -9,6 +9,8 @@ import numpy as np
 from pathlib import Path
 import pyproj
 
+from h5_utils import get_attrs_from_h5, create_proj_from_viirs_snow_h5, convert_data_array_to_geotiff, create_xarray_from_viirs_snow_h5
+
 
 def parse_metadata(hdf):
     gridmeta = hdf["HDFEOS INFORMATION"]["StructMetadata.0"][()].decode("ascii")
@@ -39,24 +41,6 @@ def parse_metadata(hdf):
     return ulx, uly, lrx, lry
 
 
-def extract_coords_from_viirs_snow_h5(hdf5_path):
-    with xr.open_dataset(
-        hdf5_path, engine="h5netcdf", group=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D"
-    ) as coords:
-        return coords["XDim"], coords["YDim"]
-
-
-def create_proj_from_viirs_snow_h5(spatial_metadata):
-    proj_string = (
-        f"+proj={spatial_metadata['grid_mapping_name'][:4]} "
-        f"+R={spatial_metadata['earth_radius']} "
-        f"+lon_0={spatial_metadata['longitude_of_central_meridian']} "
-        f"+x_0={spatial_metadata['false_easting']} "
-        f"+y_0={spatial_metadata['false_northing']}"
-    )
-    return pyproj.CRS.from_proj4(proj_string)
-
-
 def project_dataset(data_array, epsg):
     target_crs = pyproj.CRS.from_epsg(epsg)
     if target_crs.axis_info[0].unit_name in ["metre", "meter"]:
@@ -75,33 +59,6 @@ def add_overviews(output_path):
     with rasterio.open(output_path, "r+") as ds:
         ds.build_overviews([2, 4, 8, 16, 32], Resampling.nearest)
         ds.update_tags(ns="rio_overview", resampling="nearest")
-
-
-def convert_data_array_to_geotiff(data_array, output_path):
-    print(f"Exporting {data_array.name} as {output_path.name}...")
-    data_array.rio.to_raster(
-        output_path,
-        dirver="COG",
-        compression="LZW",
-        tiled=True,
-        dtype="uint8",
-        overview_resampling="nearest",
-    )
-
-
-def create_xarray_from_viirs_snow_h5(hdf5_path):
-    dataset = xr.open_dataset(
-        hdf5_path,
-        engine="h5netcdf",
-        group=r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields",
-        phony_dims="access",
-    )
-    x_dim, y_dim = extract_coords_from_viirs_snow_h5(hdf5_path)
-    dataset = dataset.assign_coords(XDim=x_dim, YDim=y_dim)
-    crs = create_proj_from_viirs_snow_h5(dataset["Projection"].attrs)
-    dataset = dataset.drop_vars("Projection", errors="ignore")
-
-    return dataset, crs
 
 
 def main():
@@ -160,8 +117,9 @@ def main():
         with h5py.File(hdf5_path, "r") as hdf:
             UpperLeftX, UpperLeftY, LowerRightX, LowerRightY = parse_metadata(hdf)
 
-        dataset, crs = create_xarray_from_viirs_snow_h5(hdf5_path)
+        dataset = create_xarray_from_viirs_snow_h5(hdf5_path)
 
+        crs = create_proj_from_viirs_snow_h5(get_attrs_from_h5(hdf5_path))
         for data_var in dataset.data_vars:
             da = dataset[data_var]
             da = da.rio.write_crs(crs)
