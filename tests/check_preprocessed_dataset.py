@@ -2,6 +2,8 @@ import unittest
 import random
 import os
 from pathlib import Path
+import pandas as pd
+import numpy as np
 
 from config import (
     snow_year_input_dir,
@@ -14,33 +16,39 @@ from h5_utils import parse_date_h5, parse_tile_h5, get_data_array_from_h5
 
 
 class UnitTest(unittest.TestCase):
-    def test_preprocessed_cube(self):
-        h5_files = list(snow_year_input_dir.glob("*.h5"))
+
+    def get_random_h5_array(self, tile_id='h11v02'):
+
+        h5_files = list(snow_year_input_dir.glob(f"*{tile_id}*.h5"))
         if h5_files:
             random_h5 = random.choice(h5_files)
             print(f"Random .h5 file: {random_h5}")
         else:
             print("No .h5 files found in the directory.")
-
         h5_tile_id = parse_tile_h5(random_h5)
-        h5_date = convert_yyyydoy_to_date(parse_date_h5(random_h5))
-
-        print(h5_date, h5_tile_id)
+        h5_date = pd.to_datetime(convert_yyyydoy_to_date(parse_date_h5(random_h5)))
 
         h5_data = get_data_array_from_h5(
             random_h5,
             r"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/CGF_NDSI_Snow_Cover",
         )
-        print(h5_data)
+        return h5_tile_id, h5_date, h5_data
 
-        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{h5_tile_id}.nc"
-        snow_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-        )
-        print(snow_ds)
-        ds_arr = snow_ds.sel(time=h5_date).all()
-        print(ds_arr)
-        self.assertEqual(h5_data, ds_arr)
+    def test_preprocessed_cube(self):
+
+        for i in range(5):
+
+            h5_tile_id, h5_date, h5_data = self.get_random_h5_array()
+
+            fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{h5_tile_id}.nc"
+            snow_ds = open_preprocessed_dataset(
+                fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+            )
+            
+
+            ds_arr = snow_ds.sel(time=h5_date, method='nearest')
+
+            self.assertTrue(np.all(h5_data == ds_arr.values))
 
 
 if __name__ == "__main__":
