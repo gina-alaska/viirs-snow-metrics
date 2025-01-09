@@ -142,7 +142,7 @@ def merge_geotiffs(file_list, output_file):
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "postprocess.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', filename=log_file_path, level=logging.INFO)
 
     for tiff_flavor in tiff_path_dict.keys():
         logging.info(f"Reprojecting {tiff_flavor} to EPSG:3338...")

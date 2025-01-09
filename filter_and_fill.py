@@ -189,7 +189,7 @@ def apply_filter_and_fill_to_masked_sections(
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "filter_and_fill.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', filename=log_file_path, level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Script to filter data where low illumination conditions are present and to fill data gaps produced by Cloud or Night conditions."
     )
@@ -220,6 +220,7 @@ if __name__ == "__main__":
     snow_ds.close()  # expect context, but still paranoid so manually closing
 
     filtered_and_filled_data.name = "CGF_NDSI_Snow_Cover"
+    logging.info(f"Writing {preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"}...")
     write_single_tile_xrdataset(filtered_and_filled_data, tile_id, "filtered_filled")
 
     client.close()

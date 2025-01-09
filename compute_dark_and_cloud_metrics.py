@@ -322,7 +322,7 @@ def write_dark_metric(dark_metric_name, computation_di):
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "dark_and_cloud_metrics.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', filename=log_file_path, level=logging.INFO)
     parser = argparse.ArgumentParser(
         description="Compute metrics for cloud and polar/winter darkness periods."
     )
