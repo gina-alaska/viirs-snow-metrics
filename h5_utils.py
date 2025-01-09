@@ -203,3 +203,14 @@ def make_sorted_h5_stack(
     for file in sorted_files:
         h5_stack.append(get_data_array_from_h5(file, variable_path, lazy))
     return h5_stack
+
+def convert_data_array_to_geotiff(data_array, output_path, **kwargs):
+    print(f"Exporting {data_array.name} as {output_path.name}...")
+    data_array.rio.to_raster(
+        output_path,
+        driver="GTiff",
+        compress="LZW",
+        tiled=True,
+        dtype="uint8",
+        **kwargs
+    )
