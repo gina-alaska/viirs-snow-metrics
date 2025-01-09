@@ -64,10 +64,12 @@ def open_preprocessed_dataset(fp, chunk_dict, data_variable=None):
     """
     logging.info(f"Opening preprocessed file {fp} as chunked Dataset...")
     if data_variable is not None:
-        with xr.open_dataset(fp)[data_variable].chunk(chunk_dict) as ds_chunked:
+        with xr.open_dataset(fp, decode_coords="all")[data_variable].chunk(
+            chunk_dict
+        ) as ds_chunked:
             return ds_chunked
     else:
-        with xr.open_dataset(fp).chunk(chunk_dict) as ds_chunked:
+        with xr.open_dataset(fp, decode_coords="all").chunk(chunk_dict) as ds_chunked:
             return ds_chunked
 
 
@@ -83,7 +85,9 @@ def write_single_tile_xrdataset(ds, tile, suffix=None):
         filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}_{suffix}.nc"
     else:
         filename = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile}.nc"
-    ds.to_netcdf(filename)#, engine="netcdf4") ## Working without this - should choose engine on it's own
+    ds.to_netcdf(
+        filename
+    )  # , engine="netcdf4") ## Working without this - should choose engine on it's own
     logging.info(f"NetCDF dataset for tile {tile} wriiten to {filename}.")
 
 
