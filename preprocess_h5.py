@@ -37,7 +37,7 @@ def create_single_tile_dataset_from_h5(tile_di, tile):
     # assuming all files have same metadata, use first for metadata
     reference_h5 = tile_di[tile][0]
     x_dim, y_dim = extract_coords_from_viirs_snow_h5(reference_h5)
-    transform = initialize_transform_h5(x_dim, y_dim)
+    # transform = initialize_transform_h5(x_dim, y_dim)
     crs = create_proj_from_viirs_snow_h5(get_attrs_from_h5(reference_h5))
 
     dates = [convert_yyyydoy_to_date(parse_date_h5(x)) for x in tile_di[tile]]
@@ -56,24 +56,27 @@ def create_single_tile_dataset_from_h5(tile_di, tile):
         variable_path = rf"/HDFEOS/GRIDS/VIIRS_Grid_IMG_2D/Data Fields/{data_var}"
         # Use lazy=True in make_sorted_h5_stack to return a stck of dask arrays, and the line below to restack them
         # Not yet configured to work with writing to NetCDF, but would be faster if possible to fix that
-        h5_stack = make_sorted_h5_stack(
-            tile_di[tile], yyyydoy_strings, variable_path
-        )  
+        h5_stack = make_sorted_h5_stack(tile_di[tile], yyyydoy_strings, variable_path)
         data_var_dict = {data_var: (["time", "y", "x"], da.array(h5_stack))}
-        #data_var_dict = {data_var: (["time", "y", "x"], da.stack(h5_stack, axis=0).rechunk({0: len(h5_stack)}))}
+        # data_var_dict = {data_var: (["time", "y", "x"], da.stack(h5_stack, axis=0).rechunk({0: len(h5_stack)}))}
         ds_dict.update(data_var_dict)
 
     ds = xr.Dataset(ds_dict, coords=ds_coords)
 
     ds.rio.write_crs(crs, inplace=True)
     ds.rio.set_spatial_dims(x_dim="x", y_dim="y", inplace=True)
-    ds.rio.write_transform(transform, inplace=True)
+    # ds.rio.write_transform(transform, inplace=True)
+
     return ds
 
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "datacube_preprocess.log")
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
 
     parser = argparse.ArgumentParser(description="Preprocessing Script - HDF5")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
