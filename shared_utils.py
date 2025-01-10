@@ -52,7 +52,7 @@ def parse_tile(fp):
     return fp.name.split("_")[2]
 
 
-def open_preprocessed_dataset(fp, chunk_dict, data_variable=None):
+def open_preprocessed_dataset(fp, chunk_dict, data_variable=None, **kwargs):
     """Open a preprocessed dataset for a given tile.
 
     Args:
@@ -64,12 +64,12 @@ def open_preprocessed_dataset(fp, chunk_dict, data_variable=None):
     """
     logging.info(f"Opening preprocessed file {fp} as chunked Dataset...")
     if data_variable is not None:
-        with xr.open_dataset(fp, decode_coords="all")[data_variable].chunk(
+        with xr.open_dataset(fp, **kwargs)[data_variable].chunk(
             chunk_dict
         ) as ds_chunked:
             return ds_chunked
     else:
-        with xr.open_dataset(fp, decode_coords="all").chunk(chunk_dict) as ds_chunked:
+        with xr.open_dataset(fp, **kwargs).chunk(chunk_dict) as ds_chunked:
             return ds_chunked
 
 
