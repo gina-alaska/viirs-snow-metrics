@@ -239,6 +239,28 @@ def compute_css_metrics(snow_on):
 
     return css_metric_dict
 
+def process_snow_metrics(chunky_ds, combined_mask):
+    snow_is_on = apply_threshold(chunky_ds)
+    snow_metrics = dict()
+    snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
+    snow_metrics.update({"last_snow_day": get_last_snow_day_array(snow_is_on)})
+
+    snow_metrics.update(
+        {
+            "fss_range": compute_full_snow_season_range(
+                snow_metrics["last_snow_day"], snow_metrics["first_snow_day"]
+            )
+        }
+    )
+    snow_metrics.update({"snow_days": count_snow_days(snow_is_on)})
+    snow_metrics.update({"no_snow_days": count_no_snow_days(chunky_ds)})
+    snow_metrics.update(compute_css_metrics(snow_is_on))
+
+    # iterate through keys in snow_metrics dict and apply mask
+    for metric_name, metric_array in snow_metrics.items():
+        snow_metrics[metric_name] = apply_mask(combined_mask, metric_array)
+    return snow_metrics
+
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "snow_metric_computation.log")
@@ -272,26 +294,10 @@ if __name__ == "__main__":
         )
 
     logging.info(f"Applying Snow Cover Threshold...")
-    snow_is_on = apply_threshold(chunky_ds)
-    snow_metrics = dict()
-    snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
-    snow_metrics.update({"last_snow_day": get_last_snow_day_array(snow_is_on)})
 
-    snow_metrics.update(
-        {
-            "fss_range": compute_full_snow_season_range(
-                snow_metrics["last_snow_day"], snow_metrics["first_snow_day"]
-            )
-        }
-    )
-    snow_metrics.update({"snow_days": count_snow_days(snow_is_on)})
-    snow_metrics.update({"no_snow_days": count_no_snow_days(chunky_ds)})
-    snow_metrics.update(compute_css_metrics(snow_is_on))
-
-    # iterate through keys in snow_metrics dict and apply mask
-    combined_mask = mask_dir / f"{tile_id}__mask_combined_{SNOW_YEAR}.tif"
-    for metric_name, metric_array in snow_metrics.items():
-        snow_metrics[metric_name] = apply_mask(combined_mask, metric_array)
+    combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
+    
+    snow_metrics = process_snow_metrics(chunky_ds, combined_mask)
 
     single_metric_profile = fetch_raster_profile(
         tile_id, {"dtype": "int16", "nodata": 0}
