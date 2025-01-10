@@ -48,7 +48,7 @@ def main(tile_id, input_dir, output_dir, year):
     client = Client(n_workers=24)
     fp = input_dir / f"snow_year_{year}_{tile_id}.nc"
     ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", decode_coords="all"
     )
 
     ocean_mask, inland_water_mask, l2_mask, combined_mask = process_masks(ds)
