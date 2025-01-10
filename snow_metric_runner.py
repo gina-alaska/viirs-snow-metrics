@@ -6,34 +6,46 @@ import argparse
 
 from config import snow_year_input_dir
 from shared_utils import list_input_files, parse_tile
+from h5_utils import parse_tile_h5
 
 
-def trigger_download():
-    os.system("python ./download.py")
+def trigger_download(format="tif"):
+    if format == "h5":
+        os.system("python ./download_h5.py")
+    else:
+        os.system("python ./download.py")
     print("Download complete.")
 
 
-def get_unique_tiles_in_input_directory():
+def get_unique_tiles_in_input_directory(format="tif"):
     """Get the unique tiles in the input directory.
 
     Returns:
         list: A list of unique tiles in the input directory.
     """
-    fps = list_input_files(snow_year_input_dir)
-    tiles_to_process = set([parse_tile(fp) for fp in fps])
+    if format == "h5":
+        fps = list_input_files(snow_year_input_dir, extension="*.h5")
+        tiles_to_process = set([parse_tile_h5(fp) for fp in fps])
+    else:
+        fps = list_input_files(snow_year_input_dir)
+        tiles_to_process = set([parse_tile(fp) for fp in fps])
     return list(tiles_to_process)
 
 
-def trigger_preprocess(tile_id):
-    result = subprocess.check_output(["python", "./preprocess.py", tile_id])
+def trigger_preprocess(tile_id, format="tif"):
+    if format == "h5":
+        result = subprocess.check_output(["python", "./preprocess_h5.py", tile_id])
+    else:
+        result = subprocess.check_output(["python", "./preprocess.py", tile_id])
     print(result)
     print("Preprocessing complete.")
 
 
-def trigger_filter_fill(tile_id):
+def trigger_filter_fill(tile_id, format="tif"):
+    script = "./filter_and_fill_h5.py" if format == "h5" else "./filter_and_fill.py"
     try:
         result = subprocess.check_output(
-            ["python", "./filter_and_fill.py", tile_id], stderr=subprocess.STDOUT
+            ["python", script, tile_id], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
@@ -41,10 +53,11 @@ def trigger_filter_fill(tile_id):
     print("Filter and fill complete.")
 
 
-def trigger_compute_masks(tile_id):
+def trigger_compute_masks(tile_id, format="tif"):
+    script = "./compute_masks_h5.py" if format == "h5" else "./compute_masks.py"
     try:
         result = subprocess.check_output(
-            ["python", "./compute_masks.py", tile_id], stderr=subprocess.STDOUT
+            ["python", script, tile_id], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
@@ -52,10 +65,11 @@ def trigger_compute_masks(tile_id):
     print("Mask computation complete.")
 
 
-def trigger_compute_snow_metrics(tile_id):
+def trigger_compute_snow_metrics(tile_id, format="tif"):
+    script = "./compute_snow_metrics_h5.py" if format == "h5" else "./compute_snow_metrics.py"
     try:
         result = subprocess.check_output(
-            ["python", "./compute_snow_metrics.py", tile_id], stderr=subprocess.STDOUT
+            ["python", script, tile_id], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
