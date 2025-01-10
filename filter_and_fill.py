@@ -202,7 +202,7 @@ if __name__ == "__main__":
 
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     snow_ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", decode_coords="all"
     )
     bitflag_ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "Algorithm_Bit_Flags_QA"
@@ -217,6 +217,8 @@ if __name__ == "__main__":
     filtered_and_filled_data = apply_filter_and_fill_to_masked_sections(
         snow_ds, mask_data, window_length=5, polyorder=1
     ).compute()
+    if snow_ds.rio.crs:
+        filtered_and_filled_data.rio.write_crs(snow_ds.rio.crs, inplace=True)
     snow_ds.close()  # expect context, but still paranoid so manually closing
 
     filtered_and_filled_data.name = "CGF_NDSI_Snow_Cover"
