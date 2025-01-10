@@ -207,9 +207,20 @@ def make_sorted_h5_stack(
 
 def convert_data_array_to_geotiff(data_array, output_path, **kwargs):
     print(f"Exporting {data_array.name} as {output_path.name}...")
+    if not data_array.rio.crs:
+        print("Warning: No CRS in data array")
+    output_params = {
+        "driver": "GTiff",
+        "compress": "LZW",
+        "tiled": True,
+        "dtype": "uint8",
+        }
+    output_params.update(kwargs)
     data_array.rio.to_raster(
-        output_path, driver="GTiff", compress="LZW", tiled=True, dtype="uint8", **kwargs
+        output_path,
+        **output_params
     )
+    print("Export complete.")
 
 
 def write_tagged_geotiff_from_data_array(
@@ -224,13 +235,16 @@ def write_tagged_geotiff_from_data_array(
         tile_id (str): The tile identifier.
         tag_name (str): The name of the metadata tag.
         tag_value (str): Value of the metadata tag.
-        year (int): THe Snow Year.
+        year (int): The Snow Year.
         arr (numpy.ndarray): The mask array.
         **kwargs: Options passed to rio.to_raster()
 
     Returns:
         None
     """
-    out_fp = dst_dir / f"{tile_id}_{tag_name}_{tag_value}_{year}.tif"
+    if tag_name:
+        out_fp = dst_dir / f"{tile_id}_{tag_name}_{tag_value}_{year}.tif"
+    else:
+        out_fp = dst_dir / f"{tile_id}_{tag_value}_{year}.tif"
     convert_data_array_to_geotiff(arr, out_fp, **kwargs)
     return None
