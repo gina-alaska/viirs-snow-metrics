@@ -27,7 +27,6 @@ def reproject_to_3338(target_dir, dst_dir):
         if file_name.endswith(".tif"):
             base = os.path.basename(file_name)
             name, _ = os.path.splitext(base)
-
             output = f"{name}_3338.tif"
             # gdalwarp it
             log_text = subprocess.run(
@@ -38,7 +37,7 @@ def reproject_to_3338(target_dir, dst_dir):
                     "-t_srs",
                     "EPSG:3338",
                     "-r",
-                    "nearest",
+                    "near",
                     "-tr",
                     "375",
                     "375",
@@ -54,6 +53,14 @@ def reproject_to_3338(target_dir, dst_dir):
             )
             logging.info(log_text.stdout)
             logging.error(log_text.stderr)
+
+
+def parse_tag_name(filename):
+    if len(filename.split("__")) > 1:
+        return filename.split("__")[1].rsplit("_", 2)[0]
+    else:
+        filename.split("_")
+    return "_".join(filename.split("_")[1:-2])
 
 
 def group_files_by_metric(target_dir):
@@ -72,13 +79,8 @@ def group_files_by_metric(target_dir):
 
     for filename in os.listdir(target_dir):
         if filename.endswith("3338.tif"):
-            # consider parse_metric function in shared utils
-            # tag_to_group = "".join(filename.split("__")[1].split("_")[0:-2])
-            tag_to_group = filename.split("__")[1].rsplit("_", 2)[0]
-            # above line likely to fail for uncertainty or mask files
-            # perhaps the parsing function should be provided as a function to this argument
+            tag_to_group = parse_tag_name(filename)
             geotiff_groups[tag_to_group].append(os.path.join(target_dir, filename))
-
     return geotiff_groups
 
 
