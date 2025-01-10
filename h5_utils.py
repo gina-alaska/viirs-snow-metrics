@@ -214,12 +214,9 @@ def convert_data_array_to_geotiff(data_array, output_path, **kwargs):
         "compress": "LZW",
         "tiled": True,
         "dtype": "uint8",
-        }
+    }
     output_params.update(kwargs)
-    data_array.rio.to_raster(
-        output_path,
-        **output_params
-    )
+    data_array.rio.to_raster(output_path, **output_params)
     print("Export complete.")
 
 

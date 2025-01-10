@@ -22,8 +22,9 @@ from compute_masks import (
 )
 from h5_utils import write_tagged_geotiff_from_data_array
 
+
 def process_masks(ds):
-    
+
     ocean_mask = generate_ocean_mask(ds)
     ocean_mask.name = "ocean_mask"
     ocean_mask.rio.set_nodata(0, inplace=True)

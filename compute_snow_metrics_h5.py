@@ -21,7 +21,11 @@ from h5_utils import write_tagged_geotiff_from_data_array
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "snow_metric_computation.log")
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
     parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     parser.add_argument(
@@ -51,13 +55,11 @@ if __name__ == "__main__":
         )
 
     logging.info(f"Applying Snow Cover Threshold...")
-    
+
     combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
     print(chunky_ds.shape)
 
-    
     snow_metrics = process_snow_metrics(chunky_ds, combined_mask)
-
 
     chunky_ds.close()
 
@@ -71,12 +73,10 @@ if __name__ == "__main__":
             metric_name,
             SNOW_YEAR,
             metric_array,
-            dtype="int16"
+            dtype="int16",
         )
         metric_array.close()
 
     client.close()
 
     print("Snow Metric Computation Script Complete.")
-
-

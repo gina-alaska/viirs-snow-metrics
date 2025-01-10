@@ -472,7 +472,11 @@ def validate_download(dl_path, number_granules_requested):
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "input_data_download.log")
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
 
     wipe_old_downloads(snow_year_input_dir)
 

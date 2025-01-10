@@ -11,6 +11,7 @@ from config import (
     SNOW_YEAR,
 )
 
+
 def main(tile_id, lat, lon, nc_path):
     print("Printing data for:", nc_path)
 
@@ -49,12 +50,17 @@ def main(tile_id, lat, lon, nc_path):
         snow_ds.close()
 
         df = pd.DataFrame(
-            {"bitflag": bitflag_values, "raw_snow": snow_values, "ff_snow": snow_values_ff}
+            {
+                "bitflag": bitflag_values,
+                "raw_snow": snow_values,
+                "ff_snow": snow_values_ff,
+            }
         )
     else:
         df = pd.DataFrame({"bitflag": bitflag_values, "raw_snow": snow_values})
 
     return df
+
 
 if __name__ == "__main__":
 
@@ -86,7 +92,11 @@ if __name__ == "__main__":
 
     tile_id = args.tile_id
     lat, lon = args.coordinates
-    nc_path = args.nc_path if args.nc_path else preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+    nc_path = (
+        args.nc_path
+        if args.nc_path
+        else preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+    )
 
     df = main(tile_id, lat, lon, nc_path)
     print(df)

@@ -9,7 +9,12 @@ import numpy as np
 from pathlib import Path
 import pyproj
 
-from h5_utils import get_attrs_from_h5, create_proj_from_viirs_snow_h5, convert_data_array_to_geotiff, create_xarray_from_viirs_snow_h5
+from h5_utils import (
+    get_attrs_from_h5,
+    create_proj_from_viirs_snow_h5,
+    convert_data_array_to_geotiff,
+    create_xarray_from_viirs_snow_h5,
+)
 
 
 def parse_metadata(hdf):

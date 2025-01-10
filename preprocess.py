@@ -204,7 +204,11 @@ def create_single_tile_dataset(tile_di, tile):
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "datacube_preprocess.log")
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
 
     parser = argparse.ArgumentParser(description="Preprocessing Script")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
