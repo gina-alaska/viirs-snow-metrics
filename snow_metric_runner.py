@@ -33,19 +33,21 @@ def get_unique_tiles_in_input_directory(format="tif"):
 
 
 def trigger_preprocess(tile_id, format="tif"):
-    if format == "h5":
-        result = subprocess.check_output(["python", "./preprocess_h5.py", tile_id])
-    else:
-        result = subprocess.check_output(["python", "./preprocess.py", tile_id])
-    print(result)
-    print("Preprocessing complete.")
-
-
-def trigger_filter_fill(tile_id, format="tif"):
-    script = "./filter_and_fill_h5.py" if format == "h5" else "./filter_and_fill.py"
+    script = "./preprocess_h5.py" if format == "h5" else "./preprocess.py"
     try:
         result = subprocess.check_output(
             ["python", script, tile_id], stderr=subprocess.STDOUT
+        )
+        print(result)
+    except subprocess.CalledProcessError as e:
+        print("Error occurred:", e.output.decode())
+    print("Preprocessing complete.")
+
+
+def trigger_filter_fill(tile_id):
+    try:
+        result = subprocess.check_output(
+            ["python", "./filter_and_fill.py", tile_id], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
@@ -66,7 +68,11 @@ def trigger_compute_masks(tile_id, format="tif"):
 
 
 def trigger_compute_snow_metrics(tile_id, format="tif"):
-    script = "./compute_snow_metrics_h5.py" if format == "h5" else "./compute_snow_metrics.py"
+    script = (
+        "./compute_snow_metrics_h5.py"
+        if format == "h5"
+        else "./compute_snow_metrics.py"
+    )
     try:
         result = subprocess.check_output(
             ["python", script, tile_id], stderr=subprocess.STDOUT
@@ -110,26 +116,33 @@ if __name__ == "__main__":
     parser.add_argument(
         "--postprocess", action="store_true", help="Trigger postprocessing"
     )
+    parser.add_argument(
+        "--format",
+        choices=["tif", "h5"],
+        default="tif",
+        help="Download/input File format: Older processing run downloads and uses tif, newer downloads and uses h5",
+    )
 
     args = parser.parse_args()
+    format = args.format
 
     if args.download:
-        trigger_download()
+        trigger_download(format)
 
-    tile_ids = get_unique_tiles_in_input_directory()
+    tile_ids = get_unique_tiles_in_input_directory(format)
     for tile_id in tile_ids:
         print(tile_id)
         if args.preprocess:
-            trigger_preprocess(tile_id)
+            trigger_preprocess(tile_id, format)
 
         if args.filter_fill:
             trigger_filter_fill(tile_id)
 
         if args.compute_masks:
-            trigger_compute_masks(tile_id)
+            trigger_compute_masks(tile_id, format)
 
         if args.compute_metrics:
-            trigger_compute_snow_metrics(tile_id)
+            trigger_compute_snow_metrics(tile_id, format)
 
     if args.postprocess:
         trigger_postprocess()
