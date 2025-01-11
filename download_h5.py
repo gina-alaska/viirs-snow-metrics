@@ -46,8 +46,7 @@ def main(short_name):
             url_path = Path(url)
             if parse_tile_h5(url_path) in needed_tile_ids and url_path.suffix != ".xml":
                 url_subset.append(url)
-
-        cmr_download(url_list, download_dir=snow_year_input_dir)
+        cmr_download(url_subset, download_dir=snow_year_input_dir)
 
 
 if __name__ == "__main__":
