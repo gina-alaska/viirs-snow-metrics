@@ -12,6 +12,7 @@ from h5_utils import (
     create_proj_from_viirs_snow_h5,
     convert_data_array_to_geotiff,
     initialize_transform_h5,
+    write_tagged_geotiff_from_data_array,
 )
 from config import SNOW_YEAR, preprocessed_dir, mask_dir
 from compute_masks import generate_ocean_mask, fetch_raster_profile
@@ -46,6 +47,16 @@ class UnitTest(unittest.TestCase):
         self.assertEqual("ocean_mask", ocean_mask.name)
         self.assertEqual(0, ocean_mask.rio.nodata)
         self.assertIsInstance(combined_mask, xr.DataArray)
+        write_tagged_geotiff_from_data_array(
+            Path("."),
+            tile_id,
+            "mask",
+            "combined",
+            2023,
+            combined_mask,
+            compress="Deflate",
+            dtype="int16",
+        )
 
 
 if __name__ == "__main__":
