@@ -103,7 +103,11 @@ def fill_obscured_values_with_adjacent_observations(snow_data, sections_to_fill)
         last_valid_before = snow_data[section.start - 1]
 
         # get first valid observation after obscured period is over
-        first_valid_after = snow_data[section.stop]
+        first_valid_after = (
+            snow_data[section.stop + 1]
+            if section.stop + 1 < snow_data.shape[0]
+            else snow_data[section.stop]
+        )
 
         # get median index (halfway point) of the obscured period
         halfway_point = (section.start + section.stop) // 2
