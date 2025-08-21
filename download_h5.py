@@ -18,11 +18,10 @@ from statistics import mean
 from xml.etree import ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
+import earthaccess
 
 from luts import short_name, needed_tile_ids
 from config import viirs_params, snow_year_input_dir, SNOW_YEAR
-from NSIDC_download import cmr_search, cmr_download
-from h5_utils import parse_tile_h5
 
 from download import wipe_old_downloads, generate_monthly_dl_chunks
 
@@ -33,20 +32,14 @@ def main(short_name):
 
     for time_chunk in snow_year_chunks:
         print(f"Starting download for {time_chunk}.")
-        print(short_name, viirs_params, snow_year_input_dir)
-        url_list = cmr_search(
-            short_name,
-            time_chunk[0],
-            time_chunk[1],
-            version=None,
-            bounding_box=viirs_params["bbox"],
+        url_list = earthaccess.search_data(
+            short_name=short_name,
+            bounding_box=tuple(map(int, viirs_params["bbox"].split(','))),
+            temporal=(time_chunk[0], time_chunk[1]),
+            #daac='NSIDC', # Seems to work without this - but possible specifying daac is needed to avoid duplicates for some years/data
+            version=2
         )
-        url_subset = []
-        for url in url_list:
-            url_path = Path(url)
-            if parse_tile_h5(url_path) in needed_tile_ids and url_path.suffix != ".xml":
-                url_subset.append(url)
-        cmr_download(url_subset, download_dir=snow_year_input_dir)
+        earthaccess.download(url_list, local_path=snow_year_input_dir)
 
 
 if __name__ == "__main__":
