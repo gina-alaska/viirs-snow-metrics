@@ -34,10 +34,10 @@ def main(short_name):
         print(f"Starting download for {time_chunk}.")
         url_list = earthaccess.search_data(
             short_name=short_name,
-            bounding_box=tuple(map(int, viirs_params["bbox"].split(','))),
+            bounding_box=tuple(map(int, viirs_params["bbox"].split(","))),
             temporal=(time_chunk[0], time_chunk[1]),
-            #daac='NSIDC', # Seems to work without this - but possible specifying daac is needed to avoid duplicates for some years/data
-            version=2
+            # daac='NSIDC', # Seems to work without this - but possible specifying daac is needed to avoid duplicates for some years/data
+            version=2,
         )
         earthaccess.download(url_list, local_path=snow_year_input_dir)
 
