@@ -1,16 +1,18 @@
 # VIIRS snow metrics post-processing: reproject, mosaic, stack.
 import os
+import glob
 import subprocess
 import logging
 from collections import defaultdict
 
 from config import (
     tiff_path_dict,
+    metrics_dir,
     SNOW_YEAR,
 )
+from luts import modis_bounds, product_version, stack_order
 
-
-def reproject_to_3338(target_dir, dst_dir):
+def reproject_to_3338(target_dir, dst_dir, clipping_bounds):
     """Reproject all GeoTIFF files in a target directory to EPSG:3338.
 
     Spawns a `gdalwarp` subprocess with these parameters:
@@ -36,6 +38,11 @@ def reproject_to_3338(target_dir, dst_dir):
                     "-tap",
                     "-t_srs",
                     "EPSG:3338",
+                    "-te",
+                    str(clipping_bounds[0]),
+                    str(clipping_bounds[1]),
+                    str(clipping_bounds[2]),
+                    str(clipping_bounds[3]),
                     "-r",
                     "near",
                     "-tr",
@@ -53,8 +60,7 @@ def reproject_to_3338(target_dir, dst_dir):
             )
             logging.info(log_text.stdout)
             logging.error(log_text.stderr)
-
-
+                
 def parse_tag_name(filename):
     if len(filename.split("__")) > 1:
         return filename.split("__")[1].rsplit("_", 2)[0]
@@ -142,6 +148,32 @@ def merge_geotiffs(file_list, output_file):
     os.remove(vrt_file)
 
 
+def metric_key(filename):
+    for i, name in enumerate(stack_order):
+        if name in filename:
+            return i
+    return len(stack_order)
+
+def stack_metrics(target_dir, dst_dir):
+    
+    tif_pattern = os.path.join(target_dir, "*.tif")
+    target_files = sorted(glob.glob(tif_pattern), key=metric_key)
+    
+    vrt_file = "output.vrt"
+    output_path = os.path.join(dst_dir, f"{SNOW_YEAR}_VIIRS_snow_metrics_{product_version}.tif")
+    
+    subprocess.run([
+        "gdalbuildvrt",
+        "-separate",
+        vrt_file
+    ] + target_files, check=True)
+
+    subprocess.run([
+        "gdal_translate",
+        vrt_file,
+        output_path
+    ], check=True)
+
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "postprocess.log")
     logging.basicConfig(
@@ -155,6 +187,7 @@ if __name__ == "__main__":
         reproject_to_3338(
             tiff_path_dict[tiff_flavor]["creation"],
             tiff_path_dict[tiff_flavor]["reprojected"],
+            modis_bounds
         )
         logging.info("Reprojection complete.")
 
@@ -166,5 +199,7 @@ if __name__ == "__main__":
             )
             merge_geotiffs(file_list, dst)
             logging.info(f"Mosaicing {tiff_flavor} {tag} complete.")
+    logging.info(f"Stacking tifs from {tiff_path_dict["single_metric"]["merged"]} and saving to {metrics_dir}")
+    stack_metrics(tiff_path_dict["single_metric"]["merged"], metrics_dir)
 
     logging.info("Postprocessing complete.")

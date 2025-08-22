@@ -1,5 +1,7 @@
 """Look-Up Tables and Parameters for VIIRS Snow Metric Computations"""
 
+product_version = "v001"
+
 short_name = "VNP10A1F"
 
 needed_tile_ids = {
@@ -62,3 +64,18 @@ snow_cover_threshold = 20
 n_obs_to_classify_ocean = 10
 n_obs_to_classify_inland_water = 10
 css_days_threshold = 14
+
+modis_bounds = [-1805447.821, 374524.164, 1712552.179, 2570024.164]
+
+stack_order = [
+    "first_snow_day",
+    "last_snow_day",
+    "fss_range",
+    "longest_css_start",
+    "longest_css_end",
+    "longest_css_range",
+    "snow_days",
+    "no_snow_days",
+    "css_segment_num",
+    "tot_css_days"
+]
