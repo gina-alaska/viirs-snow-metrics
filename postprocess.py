@@ -170,6 +170,8 @@ def stack_metrics(target_dir, dst_dir):
 
     subprocess.run(["gdal_translate", vrt_file, output_path], check=True)
 
+    os.remove(vrt_file)
+
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "postprocess.log")
