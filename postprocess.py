@@ -12,6 +12,7 @@ from config import (
 )
 from luts import modis_bounds, product_version, stack_order
 
+
 def reproject_to_3338(target_dir, dst_dir, clipping_bounds):
     """Reproject all GeoTIFF files in a target directory to EPSG:3338.
 
@@ -60,7 +61,8 @@ def reproject_to_3338(target_dir, dst_dir, clipping_bounds):
             )
             logging.info(log_text.stdout)
             logging.error(log_text.stderr)
-                
+
+
 def parse_tag_name(filename):
     if len(filename.split("__")) > 1:
         return filename.split("__")[1].rsplit("_", 2)[0]
@@ -154,25 +156,20 @@ def metric_key(filename):
             return i
     return len(stack_order)
 
+
 def stack_metrics(target_dir, dst_dir):
-    
     tif_pattern = os.path.join(target_dir, "*.tif")
     target_files = sorted(glob.glob(tif_pattern), key=metric_key)
-    
-    vrt_file = "output.vrt"
-    output_path = os.path.join(dst_dir, f"{SNOW_YEAR}_VIIRS_snow_metrics_{product_version}.tif")
-    
-    subprocess.run([
-        "gdalbuildvrt",
-        "-separate",
-        vrt_file
-    ] + target_files, check=True)
 
-    subprocess.run([
-        "gdal_translate",
-        vrt_file,
-        output_path
-    ], check=True)
+    vrt_file = "output.vrt"
+    output_path = os.path.join(
+        dst_dir, f"{SNOW_YEAR}_VIIRS_snow_metrics_{product_version}.tif"
+    )
+
+    subprocess.run(["gdalbuildvrt", "-separate", vrt_file] + target_files, check=True)
+
+    subprocess.run(["gdal_translate", vrt_file, output_path], check=True)
+
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "postprocess.log")
@@ -187,7 +184,7 @@ if __name__ == "__main__":
         reproject_to_3338(
             tiff_path_dict[tiff_flavor]["creation"],
             tiff_path_dict[tiff_flavor]["reprojected"],
-            modis_bounds
+            modis_bounds,
         )
         logging.info("Reprojection complete.")
 
@@ -199,7 +196,9 @@ if __name__ == "__main__":
             )
             merge_geotiffs(file_list, dst)
             logging.info(f"Mosaicing {tiff_flavor} {tag} complete.")
-    logging.info(f"Stacking tifs from {tiff_path_dict["single_metric"]["merged"]} and saving to {metrics_dir}")
+    logging.info(
+        f"Stacking tifs from {tiff_path_dict['single_metric']['merged']} and saving to {metrics_dir}"
+    )
     stack_metrics(tiff_path_dict["single_metric"]["merged"], metrics_dir)
 
     logging.info("Postprocessing complete.")
