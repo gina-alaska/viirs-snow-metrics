@@ -22,7 +22,6 @@ def list_input_files(src_dir, extension="*.tif"):
     """
     fps = [x for x in src_dir.glob(extension)]
     logging.info(f"Downloaded file count is {len(fps)}.")
-    logging.info(f"Files that will be included in dataset: {fps}.")
     return fps
 
 
