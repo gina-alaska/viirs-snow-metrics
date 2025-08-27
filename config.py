@@ -7,19 +7,27 @@ from luts import parameter_sets
 
 # Set "snow_year" (August 1 of SNOW_YEAR through July 31 of SNOW_YEAR + 1)
 SNOW_YEAR = os.getenv("SNOW_YEAR")
+if SNOW_YEAR is None:
+    raise EnvironmentError("Environment variable SNOW_YEAR is not set.")
 
 # path to flat directory of input data downloaded from NSIDC
-INPUT_DIR = Path(os.getenv("INPUT_DIR"))
+input_dir_env = os.getenv("INPUT_DIR")
+if input_dir_env is None:
+    raise EnvironmentError("Environment variable INPUT_DIR is not set.")
+INPUT_DIR = Path(input_dir_env)
 INPUT_DIR.mkdir(exist_ok=True, parents=True)
 # subdirectory for input data for a specific snow year
-snow_year_input_dir = Path(os.getenv("INPUT_DIR")).joinpath(SNOW_YEAR)
+snow_year_input_dir = INPUT_DIR.joinpath(SNOW_YEAR)
 snow_year_input_dir.mkdir(exist_ok=True)
 
 # path to directory for intermediate files
-SCRATCH_DIR = Path(os.getenv("SCRATCH_DIR"))
+scratch_dir_env = os.getenv("SCRATCH_DIR")
+if scratch_dir_env is None:
+    raise EnvironmentError("Environment variable SCRATCH_DIR is not set.")
+SCRATCH_DIR = Path(scratch_dir_env)
 SCRATCH_DIR.mkdir(exist_ok=True, parents=True)
 ## subdirectory for input data for a specific snow year
-snow_year_scratch_dir = Path(os.getenv("SCRATCH_DIR")).joinpath(SNOW_YEAR)
+snow_year_scratch_dir = SCRATCH_DIR.joinpath(SNOW_YEAR)
 snow_year_scratch_dir.mkdir(exist_ok=True)
 ### subdirectory for preprocessed datacube
 preprocessed_dir = snow_year_scratch_dir.joinpath("preprocessed")
@@ -66,10 +74,13 @@ reproj_merge_uncertainty_dir = snow_year_scratch_dir.joinpath(
 reproj_merge_uncertainty_dir.mkdir(exist_ok=True)
 
 # path to a directory for output snow metric results
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR"))
+output_dir_env = os.getenv("OUTPUT_DIR")
+if output_dir_env is None:
+    raise EnvironmentError("Environment variable OUTPUT_DIR is not set.")
+OUTPUT_DIR = Path(output_dir_env)
 OUTPUT_DIR.mkdir(exist_ok=True)
 # subdirectory for metrics files
-metrics_dir = Path(os.getenv("OUTPUT_DIR")).joinpath("viirs_snow_metrics")
+metrics_dir = OUTPUT_DIR.joinpath("viirs_snow_metrics")
 metrics_dir.mkdir(exist_ok=True)
 
 viirs_params = parameter_sets["prod_params"]
