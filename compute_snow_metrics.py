@@ -28,6 +28,7 @@ from shared_utils import (
     apply_mask,
     write_tagged_geotiff,
 )
+from h5_utils import write_tagged_geotiff_from_data_array
 
 
 def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
@@ -263,6 +264,67 @@ def process_snow_metrics(chunky_ds, combined_mask):
     return snow_metrics
 
 
+def main(tile_id, format, alt_input=None):
+    logging.info(f"Computing snow metrics for tile {tile_id}.")
+    # A Dask LocalCluster speeds this script up 10X
+    client = Client(n_workers=9)
+    print("Monitor the Dask client dashboard for progress at the link below:")
+    print(client.dashboard_link)
+
+    kwargs = {"decode_coords": "all"} if format == "h5" else {}
+
+    if alt_input is not None:
+        logging.info(f"Using alternate input file: {alt_input}")
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{alt_input}.nc"
+        chunky_ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", **kwargs
+        )
+        output_tag = alt_input
+    else:
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
+        chunky_ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", **kwargs
+        )
+
+    logging.info(f"Applying Snow Cover Threshold...")
+
+    combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
+
+    snow_metrics = process_snow_metrics(chunky_ds, combined_mask)
+
+    if format == "h5":
+        for metric_name, metric_array in snow_metrics.items():
+            metric_array.name = metric_name
+            metric_array.rio.set_nodata(0, inplace=True)
+            write_tagged_geotiff_from_data_array(
+                single_metric_dir,
+                tile_id,
+                "",
+                metric_name,
+                metric_array,
+                dtype="int16",
+            )
+            metric_array.close()
+
+    else:
+        single_metric_profile = fetch_raster_profile(
+            tile_id, {"dtype": "int16", "nodata": 0}
+        )
+        for metric_name, metric_array in snow_metrics.items():
+            write_tagged_geotiff(
+                single_metric_dir,
+                tile_id,
+                "",
+                metric_name,
+                single_metric_profile,
+                metric_array.compute().values.astype("int16"),
+                # don't have to call .compute(), but communicates a chunked DataArray input
+            )
+
+    client.close()
+    chunky_ds.close()
+
+
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "snow_metric_computation.log")
     logging.basicConfig(
@@ -273,50 +335,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     parser.add_argument(
+        "--format",
+        "-f",
+        choices=["tif", "h5"],
+        default="h5",
+        help="Download/input File format: Older processing methods use tif, newer uses h5",
+    )
+    parser.add_argument(
         "--alt_input",
         type=str,
         help="Alternate input file indicated by filename suffix.",
     )
     args = parser.parse_args()
-    tile_id = args.tile_id
-    logging.info(f"Computing snow metrics for tile {tile_id}.")
-    # A Dask LocalCluster speeds this script up 10X
-    client = Client(n_workers=9)
-    print("Monitor the Dask client dashboard for progress at the link below:")
-    print(client.dashboard_link)
-    if args.alt_input is not None:
-        alt_input = args.alt_input
-        logging.info(f"Using alternate input file: {alt_input}")
-        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{alt_input}.nc"
-        chunky_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-        )
-        output_tag = alt_input
-    else:
-        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
-        chunky_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-        )
 
-    logging.info(f"Applying Snow Cover Threshold...")
+    main(args.tile_id, args.format, args.alt_input)
 
-    combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
-
-    snow_metrics = process_snow_metrics(chunky_ds, combined_mask)
-
-    single_metric_profile = fetch_raster_profile(
-        tile_id, {"dtype": "int16", "nodata": 0}
-    )
-    for metric_name, metric_array in snow_metrics.items():
-        write_tagged_geotiff(
-            single_metric_dir,
-            tile_id,
-            "",
-            metric_name,
-            single_metric_profile,
-            metric_array.compute().values.astype("int16"),
-            # don't have to call .compute(), but communicates a chunked DataArray input
-        )
-    client.close()
-    chunky_ds.close()
     print("Snow Metric Computation Script Complete.")
