@@ -15,6 +15,7 @@ from shared_utils import (
     fetch_raster_profile,
     write_tagged_geotiff,
 )
+from h5_utils import write_tagged_geotiff_from_data_array
 
 
 def generate_l2fill_mask(ds_chunked):
@@ -94,6 +95,89 @@ def combine_masks(mask_list):
     return masks_combined
 
 
+def main(tile_id, format="h5"):
+
+    tile_id = args.tile_id
+    logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
+    client = Client(n_workers=24)
+    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+    if format == "h5":
+        ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", decode_coords="all"
+        )
+    else:
+        ds = open_preprocessed_dataset(
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        )
+
+    ocean_mask = generate_ocean_mask(ds)
+    inland_water_mask = generate_inland_water_mask(ds)
+    l2_mask = generate_l2fill_mask(ds)
+    if format == "h5":
+        ocean_mask.name = "ocean_mask"
+        ocean_mask.rio.set_nodata(0, inplace=True)
+        inland_water_mask.name = "inland_water_mask"
+        inland_water_mask.rio.set_nodata(0, inplace=True)
+        l2_mask.name = "l2_fill_mask"
+        l2_mask.rio.set_nodata(0, inplace=True)
+    combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
+    if format == "h5":
+        combined_mask.name = "combined_mask"
+        combined_mask.rio.set_nodata(0, inplace=True)
+
+    if format == "h5":
+
+        write_tagged_geotiff_from_data_array(
+            mask_dir, tile_id, "mask", "ocean", ocean_mask, nodata=0
+        )
+        write_tagged_geotiff_from_data_array(
+            mask_dir, tile_id, "mask", "inland_water", inland_water_mask, nodata=0
+        )
+        write_tagged_geotiff_from_data_array(
+            mask_dir, tile_id, "mask", "l2_fill", l2_mask, nodata=0
+        )
+        write_tagged_geotiff_from_data_array(
+            mask_dir, tile_id, "mask", "combined", combined_mask, nodata=0
+        )
+    else:
+        mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0})
+
+        write_tagged_geotiff(
+            mask_dir,
+            tile_id,
+            "mask",
+            "ocean",
+            mask_profile,
+            ocean_mask.values,
+        )
+        write_tagged_geotiff(
+            mask_dir,
+            tile_id,
+            "mask",
+            "inland_water",
+            mask_profile,
+            inland_water_mask.values,
+        )
+        write_tagged_geotiff(
+            mask_dir,
+            tile_id,
+            "mask",
+            "l2_fill",
+            mask_profile,
+            l2_mask.values,
+        )
+        write_tagged_geotiff(
+            mask_dir,
+            tile_id,
+            "mask",
+            "combined",
+            mask_profile,
+            combined_mask.values,
+        )
+    ds.close()
+    client.close()
+
+
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "mask_computation.log")
     logging.basicConfig(
@@ -104,48 +188,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Script to Generate Masks")
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["tif", "h5"],
+        default="h5",
+        help="Download/input File format: Older processing methods use tif, newer uses h5",
+    )
     args = parser.parse_args()
-    tile_id = args.tile_id
-    logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
-    client = Client(n_workers=24)
-    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
-    ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-    )
+    main(tile_id=args.tile_id, format=args.format)
 
-    ocean_mask = generate_ocean_mask(ds)
-    inland_water_mask = generate_inland_water_mask(ds)
-    l2_mask = generate_l2fill_mask(ds)
-    combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
-
-    mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0})
-    write_tagged_geotiff(
-        mask_dir, tile_id, "mask", "ocean", mask_profile, ocean_mask.values
-    )
-    write_tagged_geotiff(
-        mask_dir,
-        tile_id,
-        "mask",
-        "inland_water",
-        mask_profile,
-        inland_water_mask.values,
-    )
-    write_tagged_geotiff(
-        mask_dir,
-        tile_id,
-        "mask",
-        "l2_fill",
-        mask_profile,
-        l2_mask.values,
-    )
-    write_tagged_geotiff(
-        mask_dir,
-        tile_id,
-        "mask",
-        "combined",
-        mask_profile,
-        combined_mask.values,
-    )
-    ds.close()
-    client.close()
     print("Mask Generation Script Complete.")

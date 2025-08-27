@@ -8,6 +8,8 @@ import pandas as pd
 from affine import Affine
 import dask.array as da
 
+from config import SNOW_YEAR
+
 
 def parse_date_h5(fp: Path) -> str:
     """Parse the date from an h5 filename.
@@ -221,7 +223,7 @@ def convert_data_array_to_geotiff(data_array, output_path, **kwargs):
 
 
 def write_tagged_geotiff_from_data_array(
-    dst_dir, tile_id, tag_name, tag_value, year, arr, **kwargs
+    dst_dir, tile_id, tag_name, tag_value, data_array, **kwargs
 ):
     """Write data to a GeoTIFF file.
 
@@ -232,16 +234,14 @@ def write_tagged_geotiff_from_data_array(
         tile_id (str): The tile identifier.
         tag_name (str): The name of the metadata tag.
         tag_value (str): Value of the metadata tag.
-        year (int): The Snow Year.
-        arr (numpy.ndarray): The mask array.
+        data_array (xarray.core.dataarray.DataArray): The mask data array.
         **kwargs: Options passed to rio.to_raster()
 
     Returns:
         None
     """
-    if tag_name:
-        out_fp = dst_dir / f"{tile_id}_{tag_name}_{tag_value}_{year}.tif"
-    else:
-        out_fp = dst_dir / f"{tile_id}_{tag_value}_{year}.tif"
-    convert_data_array_to_geotiff(arr, out_fp, **kwargs)
+
+    out_fp = dst_dir / f"{tile_id}_{tag_name}_{tag_value}_{SNOW_YEAR}.tif"
+
+    convert_data_array_to_geotiff(data_array, out_fp, **kwargs)
     return None
