@@ -10,7 +10,7 @@ from h5_utils import parse_tile_h5
 from luts import needed_tile_ids
 
 
-def trigger_download(format="tif"):
+def trigger_download(format="h5"):
     if format == "h5":
         os.system("python ./download_h5.py")
     else:
@@ -18,7 +18,7 @@ def trigger_download(format="tif"):
     print("Download complete.")
 
 
-def get_unique_tiles_in_input_directory(format="tif"):
+def get_unique_tiles_in_input_directory(format="h5"):
     """Get the unique tiles in the input directory.
 
     Returns:
@@ -33,11 +33,11 @@ def get_unique_tiles_in_input_directory(format="tif"):
     return list(tiles_to_process)
 
 
-def trigger_preprocess(tile_id, format="tif"):
-    script = "./preprocess_h5.py" if format == "h5" else "./preprocess.py"
+def trigger_preprocess(tile_id, format="h5"):
+    script = "./preprocess.py"
     try:
         result = subprocess.check_output(
-            ["python", script, tile_id], stderr=subprocess.STDOUT
+            ["python", script, tile_id, format], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
@@ -56,11 +56,11 @@ def trigger_filter_fill(tile_id):
     print("Filter and fill complete.")
 
 
-def trigger_compute_masks(tile_id, format="tif"):
-    script = "./compute_masks_h5.py" if format == "h5" else "./compute_masks.py"
+def trigger_compute_masks(tile_id, format="h5"):
+    script = "./compute_masks.py"
     try:
         result = subprocess.check_output(
-            ["python", script, tile_id], stderr=subprocess.STDOUT
+            ["python", script, tile_id, format], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
@@ -68,15 +68,11 @@ def trigger_compute_masks(tile_id, format="tif"):
     print("Mask computation complete.")
 
 
-def trigger_compute_snow_metrics(tile_id, format="tif"):
-    script = (
-        "./compute_snow_metrics_h5.py"
-        if format == "h5"
-        else "./compute_snow_metrics.py"
-    )
+def trigger_compute_snow_metrics(tile_id, format="h5"):
+    script = "./compute_snow_metrics.py"
     try:
         result = subprocess.check_output(
-            ["python", script, tile_id], stderr=subprocess.STDOUT
+            ["python", script, tile_id, format], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
@@ -120,7 +116,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--format",
         choices=["tif", "h5"],
-        default="tif",
+        default="h5",
         help="Download/input File format: Older processing run downloads and uses tif, newer downloads and uses h5",
     )
 
