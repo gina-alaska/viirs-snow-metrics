@@ -7,6 +7,7 @@ import argparse
 from config import snow_year_input_dir
 from shared_utils import list_input_files, parse_tile
 from h5_utils import parse_tile_h5
+from luts import needed_tile_ids
 
 
 def trigger_download(format="tif"):
@@ -131,6 +132,8 @@ if __name__ == "__main__":
 
     tile_ids = get_unique_tiles_in_input_directory(format)
     for tile_id in tile_ids:
+        if tile_id not in needed_tile_ids:
+            continue
         print(tile_id)
         if args.preprocess:
             trigger_preprocess(tile_id, format)
