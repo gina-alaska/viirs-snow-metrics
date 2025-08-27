@@ -101,14 +101,13 @@ def main(tile_id, format="h5"):
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
     client = Client(n_workers=24)
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
-    if format == "h5":
-        ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", decode_coords="all"
-        )
-    else:
-        ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-        )
+    
+    kwargs = {"decode_coords": "all"} if format == "h5" else {}
+
+    ds = open_preprocessed_dataset(
+        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", **kwargs
+    )
+
 
     ocean_mask = generate_ocean_mask(ds)
     inland_water_mask = generate_inland_water_mask(ds)
