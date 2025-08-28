@@ -8,7 +8,7 @@ import rasterio as rio
 from datetime import datetime, timedelta
 
 from luts import snow_cover_threshold
-from config import SNOW_YEAR, preprocessed_dir
+from config import SNOW_YEAR, preprocessed_dir, snow_year_scratch_dir
 
 
 def list_input_files(src_dir, extension="*.tif"):
@@ -119,7 +119,7 @@ def fetch_raster_profile(tile_id, updates=None):
         dict: The raster profile.
     """
 
-    with open("file_dict.pickle", "rb") as handle:
+    with open(snow_year_scratch_dir / "file_dict.pickle", "rb") as handle:
         geotiff_dict = pickle.load(handle)
     geotiff_reference = geotiff_dict[tile_id]["CGF_NDSI_Snow_Cover"][0]
     with rio.open(geotiff_reference) as src:

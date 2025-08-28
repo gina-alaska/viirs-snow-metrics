@@ -13,7 +13,10 @@ import pandas as pd
 import rioxarray
 import dask.array as da
 
-from config import snow_year_input_dir
+from config import (
+    snow_year_input_dir,
+    snow_year_scratch_dir,
+)
 from luts import data_variables
 from shared_utils import (
     parse_tile,
@@ -85,7 +88,7 @@ def construct_file_dict(fps):
             di[tile][data_var] = []
         di[tile][data_var].append(fp)
     # persist the dict as pickle for later reference
-    with open("file_dict.pickle", "wb") as handle:
+    with open(snow_year_scratch_dir / "file_dict.pickle", "wb") as handle:
         pickle.dump(di, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return di
 

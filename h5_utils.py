@@ -8,8 +8,7 @@ import pandas as pd
 from affine import Affine
 import dask.array as da
 
-from config import SNOW_YEAR
-
+from config import SNOW_YEAR, snow_year_scratch_dir
 
 def parse_date_h5(fp: Path) -> str:
     """Parse the date from an h5 filename.
@@ -49,7 +48,7 @@ def construct_file_dict_h5(fps: list) -> dict:
             di[tile] = []
         di[tile].append(fp)
     # persist the dict as pickle for later reference
-    with open("file_dict_h5.pickle", "wb") as handle:
+    with open(snow_year_scratch_dir / "file_dict_h5.pickle", "wb") as handle:
         pickle.dump(di, handle, protocol=pickle.HIGHEST_PROTOCOL)
     return di
 
