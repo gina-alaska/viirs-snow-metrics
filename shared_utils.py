@@ -112,7 +112,11 @@ def apply_threshold(chunked_cgf_snow_cover):
     return snow_on
 
 
-def fetch_raster_profile(tile_id, updates=None, format="h5", ):
+def fetch_raster_profile(
+    tile_id,
+    updates=None,
+    format="h5",
+):
     """Fetch a raster profile to generate output mask rasters that match the downloaded NSIDC rasters.
 
     We load the GeoTIFF hash table to quicly extract a reference raster creation profile. Preserving these profiles should make the final alignment /
@@ -157,6 +161,7 @@ def fetch_raster_profile(tile_id, updates=None, format="h5", ):
         out_profile.update(updates)
     logging.info(f"GeoTIFFs will use the raster creation profile {out_profile}.")
     return out_profile
+
 
 def apply_mask(mask_fp, array_to_mask):
     """Mask out values from an array.

@@ -77,5 +77,5 @@ stack_order = [
     "snow_days",
     "no_snow_days",
     "css_segment_num",
-    "tot_css_days"
+    "tot_css_days",
 ]

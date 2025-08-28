@@ -100,7 +100,9 @@ def main(tile_id, format="h5"):
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
 
     cgf_snow_ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
+        fp,
+        {"x": "auto", "y": "auto"},
+        "CGF_NDSI_Snow_Cover",
     )
     uncertainty_data.update({"no decision": count_no_decision_occurence(cgf_snow_ds)})
     uncertainty_data.update({"missing L1B": count_missing_l1b_occurence(cgf_snow_ds)})
@@ -116,8 +118,8 @@ def main(tile_id, format="h5"):
     )
     cloud_ds.close()
 
-    out_profile = (
-        fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0}, format=format)
+    out_profile = fetch_raster_profile(
+        tile_id, {"dtype": "int16", "nodata": 0}, format=format
     )
 
     for uncertainty_name, uncertainty_array in uncertainty_data.items():

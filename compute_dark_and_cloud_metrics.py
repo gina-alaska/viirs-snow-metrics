@@ -348,12 +348,16 @@ def main(tile_id, smoothed_input=None, format="h5"):
     else:
         fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
         ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
+            fp,
+            {"x": "auto", "y": "auto"},
+            "CGF_NDSI_Snow_Cover",
         )
         output_tag = "raw"
     print(ds.rio.crs)
     # intialize input and output parameters
-    out_profile = fetch_raster_profile(tile_id, updates={"dtype": "int16", "nodata": 0}, format=format)
+    out_profile = fetch_raster_profile(
+        tile_id, updates={"dtype": "int16", "nodata": 0}, format=format
+    )
 
     combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
 

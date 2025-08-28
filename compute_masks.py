@@ -102,7 +102,9 @@ def main(tile_id, format="h5"):
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
 
     ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
+        fp,
+        {"x": "auto", "y": "auto"},
+        "CGF_NDSI_Snow_Cover",
     )
 
     ocean_mask = generate_ocean_mask(ds)
@@ -110,7 +112,9 @@ def main(tile_id, format="h5"):
     l2_mask = generate_l2fill_mask(ds)
     combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
 
-    mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0}, format=format)
+    mask_profile = fetch_raster_profile(
+        tile_id, {"dtype": "int8", "nodata": 0}, format=format
+    )
 
     write_tagged_geotiff(
         mask_dir,

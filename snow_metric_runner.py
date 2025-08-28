@@ -6,14 +6,12 @@ import argparse
 
 from config import snow_year_input_dir
 from shared_utils import list_input_files, parse_tile, parse_tile_h5
-from luts import needed_tile_ids
+from luts import needed_tile_ids, short_name
 
 
-def trigger_download(format="h5"):
-    if format == "h5":
-        os.system("python ./download_h5.py")
-    else:
-        os.system("python ./download.py")
+def trigger_download(format="h5", short_name=short_name):
+
+    os.system(f"python ./download.py --f {format} --short_name {short_name}")
     print("Download complete.")
 
 
@@ -129,7 +127,7 @@ if __name__ == "__main__":
     for tile_id in tile_ids:
         if tile_id not in needed_tile_ids:
             continue
-        print(tile_id)
+        print(f"Processing tile {tile_id}...")
         if args.preprocess:
             trigger_preprocess(tile_id, format)
 

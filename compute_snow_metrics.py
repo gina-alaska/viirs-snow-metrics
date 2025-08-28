@@ -274,13 +274,17 @@ def main(tile_id, format, alt_input=None):
         logging.info(f"Using alternate input file: {alt_input}")
         fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{alt_input}.nc"
         chunky_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
+            fp,
+            {"x": "auto", "y": "auto"},
+            "CGF_NDSI_Snow_Cover",
         )
         output_tag = alt_input
     else:
         fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
         chunky_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
+            fp,
+            {"x": "auto", "y": "auto"},
+            "CGF_NDSI_Snow_Cover",
         )
 
     logging.info(f"Applying Snow Cover Threshold...")
@@ -288,7 +292,6 @@ def main(tile_id, format, alt_input=None):
     combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
 
     snow_metrics = process_snow_metrics(chunky_ds, combined_mask)
-
 
     single_metric_profile = fetch_raster_profile(
         tile_id, {"dtype": "int16", "nodata": 0}, format=format
