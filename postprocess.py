@@ -1,5 +1,6 @@
 # VIIRS snow metrics post-processing: reproject, mosaic, stack.
 import os
+import re
 import glob
 import subprocess
 import logging
@@ -10,7 +11,7 @@ from config import (
     metrics_dir,
     SNOW_YEAR,
 )
-from luts import modis_bounds, product_version, stack_order
+from luts import modis_bounds, product_version, stack_order, needed_tile_ids
 
 
 def reproject_to_3338(target_dir, dst_dir, clipping_bounds):
@@ -177,9 +178,11 @@ if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "postprocess.log")
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
-        filename=log_file_path,
+        # filename=log_file_path,
         level=logging.INFO,
     )
+
+    tile_order = {tile_id: index for index, tile_id in enumerate(needed_tile_ids)}
 
     for tiff_flavor in tiff_path_dict.keys():
         logging.info(f"Reprojecting {tiff_flavor} to EPSG:3338...")
@@ -193,10 +196,18 @@ if __name__ == "__main__":
         file_groups = group_files_by_metric(tiff_path_dict[tiff_flavor]["reprojected"])
         for tag, file_list in file_groups.items():
             logging.info(f"Mosaicing {tiff_flavor} {tag}...")
+
+            sorted_file_list = sorted(
+                file_list,
+                key=lambda path: tile_order.get(
+                    re.search(r"h\d{2}v\d{2}", path).group(), float("inf")
+                ),
+            )
+
             dst = (
                 tiff_path_dict[tiff_flavor]["merged"] / f"{tag}_merged_{SNOW_YEAR}.tif"
             )
-            merge_geotiffs(file_list, dst)
+            merge_geotiffs(sorted_file_list, dst)
             logging.info(f"Mosaicing {tiff_flavor} {tag} complete.")
     logging.info(
         f"Stacking tifs from {tiff_path_dict['single_metric']['merged']} and saving to {metrics_dir}"
