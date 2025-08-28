@@ -262,6 +262,19 @@ def process_snow_metrics(chunky_ds, combined_mask):
         snow_metrics[metric_name] = apply_mask(combined_mask, metric_array)
     return snow_metrics
 
+def count_cloud_occurence(chunked_cgf_snow_cover):
+    """Count the per-pixel occurrence of "Cloud" in the snow year.
+
+    Args:
+        chunked_cgf_snow_cover (xarray.Dataset): The chunked dataset.
+
+    Returns:
+        xr.DataArray: count of "Cloud" values".
+    """
+
+    logging.info(f"Counting occurence of `Cloud` values...")
+    cloud_day_count = (chunked_cgf_snow_cover == inv_cgf_codes["Cloud"]).sum(dim="time")
+    return cloud_day_count
 
 def main(tile_id, format, alt_input=None):
     logging.info(f"Computing snow metrics for tile {tile_id}.")
@@ -292,6 +305,20 @@ def main(tile_id, format, alt_input=None):
     combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
 
     snow_metrics = process_snow_metrics(chunky_ds, combined_mask)
+    
+    chunky_ds.close()
+    
+    unprocessed_fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+    
+    unprocessed_ds = open_preprocessed_dataset(
+        unprocessed_fp,
+        {"x": "auto", "y": "auto"},
+        "CGF_NDSI_Snow_Cover",
+    )
+
+    snow_metrics.update({"cloud_days": count_cloud_occurence(unprocessed_ds)})
+    
+    unprocessed_ds.close()
 
     single_metric_profile = fetch_raster_profile(
         tile_id, {"dtype": "int16", "nodata": 0}, format=format
@@ -308,14 +335,14 @@ def main(tile_id, format, alt_input=None):
         )
 
     client.close()
-    chunky_ds.close()
+
 
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "snow_metric_computation.log")
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
-        filename=log_file_path,
+        #filename=log_file_path,
         level=logging.INFO,
     )
     parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
