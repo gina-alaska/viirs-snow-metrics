@@ -100,7 +100,7 @@ def main(tile_id, format="h5"):
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
     client = Client(n_workers=24)
-    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
     
     kwargs = {"decode_coords": "all"} if format == "h5" else {}
 
