@@ -52,7 +52,7 @@ Final stacked snow metric GeoTiff files will be created in this directory with t
 
 #### Runtime Options
 ###### `SNOW_YEAR`
-Set the "snow year" to download and process. Snow year 2015 begins August 1, 2015 and ends on July 31, 2016. Leap days are included.
+Set the "snow year" to download and process. Snow year 2015 begins August 1, 2014 and ends on July 31, 2015. Leap days are included.
 ```sh
 export SNOW_YEAR=2015
 ``` 
