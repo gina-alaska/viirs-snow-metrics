@@ -14,8 +14,8 @@ from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
     write_tagged_geotiff,
+    write_tagged_geotiff_from_data_array,
 )
-from h5_utils import write_tagged_geotiff_from_data_array
 
 
 def generate_l2fill_mask(ds_chunked):
@@ -101,13 +101,12 @@ def main(tile_id, format="h5"):
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
     client = Client(n_workers=24)
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
-    
+
     kwargs = {"decode_coords": "all"} if format == "h5" else {}
 
     ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", **kwargs
     )
-
 
     ocean_mask = generate_ocean_mask(ds)
     inland_water_mask = generate_inland_water_mask(ds)

@@ -5,8 +5,7 @@ import subprocess
 import argparse
 
 from config import snow_year_input_dir
-from shared_utils import list_input_files, parse_tile
-from h5_utils import parse_tile_h5
+from shared_utils import list_input_files, parse_tile, parse_tile_h5
 from luts import needed_tile_ids
 
 

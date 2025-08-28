@@ -23,8 +23,6 @@ from shared_utils import (
     list_input_files,
     write_single_tile_xrdataset,
     convert_yyyydoy_to_date,
-)
-from h5_utils import (
     construct_file_dict_h5,
     extract_coords_from_viirs_snow_h5,
     create_proj_from_viirs_snow_h5,

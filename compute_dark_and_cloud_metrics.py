@@ -17,8 +17,8 @@ from shared_utils import (
     fetch_raster_profile,
     apply_mask,
     write_tagged_geotiff,
+    write_tagged_geotiff_from_data_array,
 )
-from h5_utils import write_tagged_geotiff_from_data_array
 
 
 def is_obscured(chunked_cgf_snow_cover, dark_source):
@@ -214,13 +214,13 @@ def get_snow_transition_cases(snow_is_on_at_dusk, snow_is_on_at_dawn):
     ]
     # mapped to the above
     numeric_transition_cases = [1, 2, 3]
-    #snow_transition_cases = np.select(
+    # snow_transition_cases = np.select(
     #    transition_cases, numeric_transition_cases, default=0
-    #)
+    # )
     snow_transition_cases = xr.where(
-        snow_did_not_flip, 1,
-        xr.where(snow_flipped_off_to_on, 2,
-        xr.where(snow_flipped_on_to_off, 3, 0))
+        snow_did_not_flip,
+        1,
+        xr.where(snow_flipped_off_to_on, 2, xr.where(snow_flipped_on_to_off, 3, 0)),
     )
     return snow_transition_cases
 
@@ -341,7 +341,7 @@ if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "dark_and_cloud_metrics.log")
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
-        #filename=log_file_path,
+        # filename=log_file_path,
         level=logging.INFO,
     )
     parser = argparse.ArgumentParser(
@@ -368,7 +368,7 @@ if __name__ == "__main__":
     )
 
     client = Client(memory_limit="64GiB", timeout="60s")  # mem per Dask worker
-    
+
     kwargs = {"decode_coords": "all"} if format == "h5" else {}
 
     if smoothed_input is not None:

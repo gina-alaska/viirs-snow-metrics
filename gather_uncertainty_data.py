@@ -12,8 +12,8 @@ from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
     write_tagged_geotiff,
+    write_tagged_geotiff_from_data_array,
 )
-from h5_utils import write_tagged_geotiff_from_data_array
 
 
 def count_no_decision_occurence(ds_chunked):
@@ -91,6 +91,7 @@ def get_max_cloud_persistence(ds_chunked):
     max_cloud_persist = ds_chunked.max(dim="time")
     return max_cloud_persist
 
+
 def main(tile_id, format="h5"):
     logging.info(
         f"Gathering uncertainty data for tile {tile_id} for snow year {SNOW_YEAR}."
@@ -98,7 +99,7 @@ def main(tile_id, format="h5"):
     client = Client()
     uncertainty_data = dict()
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
-    
+
     kwargs = {"decode_coords": "all"} if format == "h5" else {}
 
     cgf_snow_ds = open_preprocessed_dataset(
@@ -118,7 +119,11 @@ def main(tile_id, format="h5"):
     )
     cloud_ds.close()
 
-    out_profile = fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0}) if format == "tif" else None
+    out_profile = (
+        fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0})
+        if format == "tif"
+        else None
+    )
 
     for uncertainty_name, uncertainty_array in uncertainty_data.items():
         if uncertainty_array.sum().compute() == 0:
@@ -147,11 +152,12 @@ def main(tile_id, format="h5"):
 
     client.close()
 
+
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "source_data_uncertainty.log")
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
-        #filename=log_file_path,
+        # filename=log_file_path,
         level=logging.INFO,
     )
     parser = argparse.ArgumentParser(
@@ -166,6 +172,6 @@ if __name__ == "__main__":
         help="Download/input File format: Older processing methods use tif, newer uses h5",
     )
     args = parser.parse_args()
-    main(tile_id = args.tile_id, format=args.format)
+    main(tile_id=args.tile_id, format=args.format)
 
     print("Uncertainty Data Fetch Complete.")

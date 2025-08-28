@@ -27,8 +27,8 @@ from shared_utils import (
     apply_threshold,
     apply_mask,
     write_tagged_geotiff,
+    write_tagged_geotiff_from_data_array,
 )
-from h5_utils import write_tagged_geotiff_from_data_array
 
 
 def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
