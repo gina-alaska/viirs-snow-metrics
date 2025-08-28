@@ -13,6 +13,16 @@ from config import (
 
 
 def main(tile_id, lat, lon, nc_path):
+    """Creates a dataframe of snow and bitflag values for a given tile and lat/lon coordinates from the original and filtered/filled datasets. Output can be printed to the console or saved as a .csv file.
+    Args:
+        tile_id (str): VIIRS tile ID (e.g., h11v02)
+        lat (float): Latitude of the point of interest
+        lon (float): Longitude of the point of interest
+        nc_path (Path): Path to the netCDF file to extract data from
+    Returns:
+        pd.DataFrame: DataFrame containing snow and bitflag values
+
+    """
     print("Printing data for:", nc_path)
 
     snow_ds = open_preprocessed_dataset(
@@ -25,10 +35,9 @@ def main(tile_id, lat, lon, nc_path):
     snow_values = snow_ds.sel(x=lat, y=lon, method="nearest").values
     bitflag_values = bitflag_ds.sel(x=lat, y=lon, method="nearest").values
 
-    print(snow_values)
-    print(bitflag_values)
-
-    print(inv_cgf_codes)
+    print("\nSnow value array:\n", snow_values)
+    print("\nBitflag value array:\n", bitflag_values)
+    print("\nBitflag codes:\n", inv_cgf_codes)
 
     snow_ds.close()
     bitflag_ds.close()
@@ -45,7 +54,7 @@ def main(tile_id, lat, lon, nc_path):
 
         snow_values_ff = snow_ds.sel(x=lat, y=lon, method="nearest").values
 
-        print(snow_values_ff)
+        print("\nFiltered and filled snow value array:\n", snow_values_ff)
 
         snow_ds.close()
 
@@ -86,9 +95,7 @@ if __name__ == "__main__":
         default=None,
         help="Optional output path to save .csv of dataframe",
     )
-
     args = parser.parse_args()
-    print(args)
 
     tile_id = args.tile_id
     lat, lon = args.coordinates
@@ -99,7 +106,7 @@ if __name__ == "__main__":
     )
 
     df = main(tile_id, lat, lon, nc_path)
-    print(df)
+    print("Final DataFrame:\n", df)
 
     if args.output_csv:
         df.to_csv(args.output_csv)
