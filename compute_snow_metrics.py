@@ -27,7 +27,6 @@ from shared_utils import (
     apply_threshold,
     apply_mask,
     write_tagged_geotiff,
-    write_tagged_geotiff_from_data_array,
 )
 
 
@@ -271,19 +270,17 @@ def main(tile_id, format, alt_input=None):
     print("Monitor the Dask client dashboard for progress at the link below:")
     print(client.dashboard_link)
 
-    kwargs = {"decode_coords": "all"} if format == "h5" else {}
-
     if alt_input is not None:
         logging.info(f"Using alternate input file: {alt_input}")
         fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{alt_input}.nc"
         chunky_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", **kwargs
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
         )
         output_tag = alt_input
     else:
         fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
         chunky_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", **kwargs
+            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
         )
 
     logging.info(f"Applying Snow Cover Threshold...")
@@ -292,34 +289,20 @@ def main(tile_id, format, alt_input=None):
 
     snow_metrics = process_snow_metrics(chunky_ds, combined_mask)
 
-    if format == "h5":
-        for metric_name, metric_array in snow_metrics.items():
-            metric_array.name = metric_name
-            metric_array.rio.set_nodata(0, inplace=True)
-            write_tagged_geotiff_from_data_array(
-                single_metric_dir,
-                tile_id,
-                "",
-                metric_name,
-                metric_array,
-                dtype="int16",
-            )
-            metric_array.close()
 
-    else:
-        single_metric_profile = fetch_raster_profile(
-            tile_id, {"dtype": "int16", "nodata": 0}
+    single_metric_profile = fetch_raster_profile(
+        tile_id, {"dtype": "int16", "nodata": 0}, format=format
+    )
+    for metric_name, metric_array in snow_metrics.items():
+        write_tagged_geotiff(
+            single_metric_dir,
+            tile_id,
+            "",
+            metric_name,
+            single_metric_profile,
+            metric_array.compute().values.astype("int16"),
+            # don't have to call .compute(), but communicates a chunked DataArray input
         )
-        for metric_name, metric_array in snow_metrics.items():
-            write_tagged_geotiff(
-                single_metric_dir,
-                tile_id,
-                "",
-                metric_name,
-                single_metric_profile,
-                metric_array.compute().values.astype("int16"),
-                # don't have to call .compute(), but communicates a chunked DataArray input
-            )
 
     client.close()
     chunky_ds.close()

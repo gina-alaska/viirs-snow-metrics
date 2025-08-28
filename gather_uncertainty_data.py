@@ -12,7 +12,6 @@ from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
     write_tagged_geotiff,
-    write_tagged_geotiff_from_data_array,
 )
 
 
@@ -100,10 +99,8 @@ def main(tile_id, format="h5"):
     uncertainty_data = dict()
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
 
-    kwargs = {"decode_coords": "all"} if format == "h5" else {}
-
     cgf_snow_ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", **kwargs
+        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
     )
     uncertainty_data.update({"no decision": count_no_decision_occurence(cgf_snow_ds)})
     uncertainty_data.update({"missing L1B": count_missing_l1b_occurence(cgf_snow_ds)})
@@ -120,9 +117,7 @@ def main(tile_id, format="h5"):
     cloud_ds.close()
 
     out_profile = (
-        fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0})
-        if format == "tif"
-        else None
+        fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0}, format=format)
     )
 
     for uncertainty_name, uncertainty_array in uncertainty_data.items():
@@ -131,24 +126,14 @@ def main(tile_id, format="h5"):
                 f"No occurences found for {uncertainty_name}. A GeoTIFF will not be written."
             )
             continue
-        if format == "h5":
-            write_tagged_geotiff_from_data_array(
-                uncertainty_dir,
-                tile_id,
-                "",
-                uncertainty_name,
-                uncertainty_array,
-                nodata=0,
-            )
-        else:
-            write_tagged_geotiff(
-                uncertainty_dir,
-                tile_id,
-                "",
-                uncertainty_name,
-                out_profile,
-                uncertainty_array.compute().values.astype("int16"),
-            )
+        write_tagged_geotiff(
+            uncertainty_dir,
+            tile_id,
+            "",
+            uncertainty_name,
+            out_profile,
+            uncertainty_array.compute().values.astype("int16"),
+        )
 
     client.close()
 
@@ -157,7 +142,7 @@ if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "source_data_uncertainty.log")
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
-        # filename=log_file_path,
+        filename=log_file_path,
         level=logging.INFO,
     )
     parser = argparse.ArgumentParser(

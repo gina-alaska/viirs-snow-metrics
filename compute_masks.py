@@ -14,7 +14,6 @@ from shared_utils import (
     open_preprocessed_dataset,
     fetch_raster_profile,
     write_tagged_geotiff,
-    write_tagged_geotiff_from_data_array,
 )
 
 
@@ -102,76 +101,49 @@ def main(tile_id, format="h5"):
     client = Client(n_workers=24)
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
 
-    kwargs = {"decode_coords": "all"} if format == "h5" else {}
-
     ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", **kwargs
+        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover",
     )
 
     ocean_mask = generate_ocean_mask(ds)
     inland_water_mask = generate_inland_water_mask(ds)
     l2_mask = generate_l2fill_mask(ds)
-    if format == "h5":
-        ocean_mask.name = "ocean_mask"
-        ocean_mask.rio.set_nodata(0, inplace=True)
-        inland_water_mask.name = "inland_water_mask"
-        inland_water_mask.rio.set_nodata(0, inplace=True)
-        l2_mask.name = "l2_fill_mask"
-        l2_mask.rio.set_nodata(0, inplace=True)
     combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
-    if format == "h5":
-        combined_mask.name = "combined_mask"
-        combined_mask.rio.set_nodata(0, inplace=True)
 
-    if format == "h5":
+    mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0}, format=format)
 
-        write_tagged_geotiff_from_data_array(
-            mask_dir, tile_id, "mask", "ocean", ocean_mask, nodata=0
-        )
-        write_tagged_geotiff_from_data_array(
-            mask_dir, tile_id, "mask", "inland_water", inland_water_mask, nodata=0
-        )
-        write_tagged_geotiff_from_data_array(
-            mask_dir, tile_id, "mask", "l2_fill", l2_mask, nodata=0
-        )
-        write_tagged_geotiff_from_data_array(
-            mask_dir, tile_id, "mask", "combined", combined_mask, nodata=0
-        )
-    else:
-        mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0})
-
-        write_tagged_geotiff(
-            mask_dir,
-            tile_id,
-            "mask",
-            "ocean",
-            mask_profile,
-            ocean_mask.values,
-        )
-        write_tagged_geotiff(
-            mask_dir,
-            tile_id,
-            "mask",
-            "inland_water",
-            mask_profile,
-            inland_water_mask.values,
-        )
-        write_tagged_geotiff(
-            mask_dir,
-            tile_id,
-            "mask",
-            "l2_fill",
-            mask_profile,
-            l2_mask.values,
-        )
-        write_tagged_geotiff(
-            mask_dir,
-            tile_id,
-            "mask",
-            "combined",
-            mask_profile,
-            combined_mask.values,
-        )
+    write_tagged_geotiff(
+        mask_dir,
+        tile_id,
+        "mask",
+        "ocean",
+        mask_profile,
+        ocean_mask.values,
+    )
+    write_tagged_geotiff(
+        mask_dir,
+        tile_id,
+        "mask",
+        "inland_water",
+        mask_profile,
+        inland_water_mask.values,
+    )
+    write_tagged_geotiff(
+        mask_dir,
+        tile_id,
+        "mask",
+        "l2_fill",
+        mask_profile,
+        l2_mask.values,
+    )
+    write_tagged_geotiff(
+        mask_dir,
+        tile_id,
+        "mask",
+        "combined",
+        mask_profile,
+        combined_mask.values,
+    )
     ds.close()
     client.close()
 

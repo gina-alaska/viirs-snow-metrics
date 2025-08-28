@@ -112,7 +112,7 @@ def apply_threshold(chunked_cgf_snow_cover):
     return snow_on
 
 
-def fetch_raster_profile(tile_id, updates=None):
+def fetch_raster_profile(tile_id, updates=None, format="h5", ):
     """Fetch a raster profile to generate output mask rasters that match the downloaded NSIDC rasters.
 
     We load the GeoTIFF hash table to quicly extract a reference raster creation profile. Preserving these profiles should make the final alignment /
@@ -120,21 +120,43 @@ def fetch_raster_profile(tile_id, updates=None):
 
     Args:
         tile_id (str): The tile identifier.
+        format (str): The file format of the source data, either 'h5' or 'tif'.
         updates (dict): Modifications to the intial raster creation profile e.g., `{"dtype": "int8", "nodata": 0}`
     Returns:
         dict: The raster profile.
     """
-
-    with open(snow_year_scratch_dir / "file_dict.pickle", "rb") as handle:
-        geotiff_dict = pickle.load(handle)
-    geotiff_reference = geotiff_dict[tile_id]["CGF_NDSI_Snow_Cover"][0]
-    with rio.open(geotiff_reference) as src:
-        out_profile = src.profile
+    if format == "tif":
+        with open(snow_year_scratch_dir / "file_dict.pickle", "rb") as handle:
+            geotiff_dict = pickle.load(handle)
+        geotiff_reference = geotiff_dict[tile_id]["CGF_NDSI_Snow_Cover"][0]
+        with rio.open(geotiff_reference) as src:
+            out_profile = src.profile
+    else:
+        with open(snow_year_scratch_dir / "file_dict_h5.pickle", "rb") as handle:
+            h5_dict = pickle.load(handle)
+        reference_h5 = h5_dict[tile_id][0]
+        x_dim, y_dim = extract_coords_from_viirs_snow_h5(reference_h5)
+        crs = create_proj_from_viirs_snow_h5(get_attrs_from_h5(reference_h5))
+        transform = initialize_transform_h5(x_dim, y_dim)
+        out_profile = {
+            "driver": "GTiff",
+            "dtype": "uint8",
+            "nodata": 0,
+            "width": len(x_dim),
+            "height": len(y_dim),
+            "count": 1,
+            "crs": crs,
+            "transform": transform,
+            "blockxsize": len(x_dim),
+            "blockysize": 1,
+            "tiled": False,
+            "compress": "deflate",
+            "interleave": "band",
+        }
     if updates is not None:
         out_profile.update(updates)
     logging.info(f"GeoTIFFs will use the raster creation profile {out_profile}.")
     return out_profile
-
 
 def apply_mask(mask_fp, array_to_mask):
     """Mask out values from an array.
@@ -241,7 +263,7 @@ def initialize_transform_h5(x_dim, y_dim):
     origin_x = float(x_dim[0] - (pixel_size_x / 2))
     origin_y = float(y_dim[0] + (pixel_size_y / 2))
 
-    transform = Affine(pixel_size_x, 0, origin_x, 0, -pixel_size_y, origin_y)
+    transform = Affine(pixel_size_x, 0, origin_x, 0, pixel_size_y, origin_y)
     return transform
 
 
