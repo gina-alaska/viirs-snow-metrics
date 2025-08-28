@@ -18,23 +18,27 @@ Developers and users must set the following environment variables:
 #### Directory Structure
 These variables will be read by the configuration file. If the directories do not exist they will be created for you at runtime.
 ###### `INPUT_DIR`
-Set to a path where you will download and reference the input data from NSIDC. Anticpate needing around 80 GB free disk space per snow year to download all tiles for the full Alaska spatial domain. Example:
+Set to a path where you will download and reference the input data from NSIDC. Anticipate needing around 25 GB free disk space per snow year to download all tiles for the full Alaska spatial domain as HDF5 files, or 80 GB as GeoTIFFs. Example:
 ```sh
 export INPUT_DIR=/export/datadir/"$USER"_viirs_snow/VIIRS_L3_snow_cover
 ```
 ###### `SCRATCH_DIR`
-Set the path where you will read/write intermediate data. Something like:
+Set the path where you will read/write intermediate data. At least 200 GB will be needed for intermediate files. Example:
 ```sh
 export SCRATCH_DIR=/export/datadir/"$USER"_viirs_snow/scratch
 ```
-The scratch directory structure will look something like this:
+The scratch directory is structured as such:
 ```
 /export/datadir/$USER_viirs_snow/scratch
 └── $SNOW_YEAR
     ├── masks
     ├── preprocessed
+    ├── reprojected_mask_geotiffs
+    ├── reprojected_merged_mask_geotiffs
     ├── reprojected_merged_single_metric_geotiffs
+    ├── reprojected_merged_uncertainty_geotiffs
     ├── reprojected_single_metric_geotiffs
+    ├── reprojected_uncertainty_geotiffs
     ├── single_metric_geotiffs
     └── uncertainty_geotiffs
 ```
@@ -43,6 +47,9 @@ Set to a path where you will write the snow metric outputs to disk. Use a shared
 ```sh
 export OUTPUT_DIR=/export/datadir/"$USER"_viirs_snow/VIIRS_snow_metrics
 ``` 
+Final stacked snow metric GeoTiff files will be created in this directory with the naming structure: 
+```{SNOW_YEAR}_VIIRS_snow_metrics_{version}.tif```
+
 #### Runtime Options
 ###### `SNOW_YEAR`
 Set the "snow year" to download and process. Snow year 2015 begins August 1, 2015 and ends on July 31, 2016. Leap days are included.
