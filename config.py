@@ -5,7 +5,7 @@ from pathlib import Path
 
 from luts import parameter_sets
 
-# Set "snow_year" (August 1 of SNOW_YEAR through July 31 of SNOW_YEAR + 1)
+# Set "snow_year" (August 1 of SNOW_YEAR - 1 through July 31 of SNOW_YEAR)
 SNOW_YEAR = os.getenv("SNOW_YEAR")
 if SNOW_YEAR is None:
     raise EnvironmentError("Environment variable SNOW_YEAR is not set.")
