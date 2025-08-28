@@ -63,8 +63,9 @@ VIIRS Snow Metrics v001 contains 10 bands:
 
 Daily products for tiles over Alaska are downloaded as HDF5 files for a given Snow Year (August 1st of the year prior to July 31st of the Snow Year). For each tile, the HDF5 files are sorted by date and stacked into a year-long netcdf dataset. Due to limited illumination during winter, higher latitudes have significant portions of time with data quality limitations. Metadata in the products indicating low illumination and night are used to filter out sections of poor or no data and fill them with a smoothing algorithm (Figure 1).
 
-![Figure 1: Processing used to filter out low illumination and night sections and backfill with smoothed data prior to calculating metrics](./Files/filter_and_fill_algorithm.png)
+![A conceptual diagram showing the processing steps done to filter and fill low-quality data](./Files/filter_and_fill_algorithm.png)
 
+_Figure 1: Processing used to filter out low illumination and night sections and backfill with smoothed data prior to calculating metrics_
 
 A combined mask is created to identify locations categorized as ocean, inland water, and where no data is available. From the smoothed datasets, in locations not masked out, a series of metrics are calculated. Valid snow data in the CDF Snow Cover data is represented by values from 0 - 100; a minimum threshold of 20 was used for v001.
 
