@@ -353,7 +353,6 @@ def main(tile_id, smoothed_input=None, format="h5"):
             "CGF_NDSI_Snow_Cover",
         )
         output_tag = "raw"
-    print(ds.rio.crs)
     # intialize input and output parameters
     out_profile = fetch_raster_profile(
         tile_id, updates={"dtype": "int16", "nodata": 0}, format=format
@@ -367,7 +366,7 @@ def main(tile_id, smoothed_input=None, format="h5"):
         "out_profile": out_profile,
     }
 
-    for darkness_source in ["Night"]:  # , "Cloud"]:
+    for darkness_source in ["Night", "Cloud"]:
         tag = darkness_source.lower()
         di_tag = f"{output_tag}_{darkness_source.lower()}"
 
