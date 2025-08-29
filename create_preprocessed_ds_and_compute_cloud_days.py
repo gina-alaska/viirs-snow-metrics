@@ -50,7 +50,7 @@ def count_cloud_occurence(chunked_cgf_snow_cover):
     return cloud_day_count
 
 
-def main(tile_id, source_data_type="raw"):
+def main(tile_id, source_data_type="raw", preprocess=True):
     """Main processing function to create cloud days metric for a single tile.
 
     This can be used on non-cloud-gap-filled data to see how many days were originally classified as cloudy
@@ -79,18 +79,30 @@ def main(tile_id, source_data_type="raw"):
     else:
         variables = data_variables
 
-    h5_dict = construct_file_dict_h5(h5_paths)
-    tile_ds = create_single_tile_dataset_from_h5(
-        h5_dict, tile_id, data_variables=variables
-    )
-    write_single_tile_xrdataset(tile_ds, tile_id)
+    if preprocess:
+        h5_dict = construct_file_dict_h5(h5_paths)
+        tile_ds = create_single_tile_dataset_from_h5(
+            h5_dict, tile_id, data_variables=variables
+        )
+        if source_data_type == "raw":
+            write_single_tile_xrdataset(tile_ds, tile_id, suffix="raw")
+        else:
+            write_single_tile_xrdataset(tile_ds, tile_id)
 
     unprocessed_fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
-    unprocessed_ds = open_preprocessed_dataset(
-        unprocessed_fp,
-        {"x": "auto", "y": "auto"},
-        "NDSI_Snow_Cover",
-    )
+    if source_data_type == "raw":
+        unprocessed_ds = open_preprocessed_dataset(
+            unprocessed_fp,
+            {"x": "auto", "y": "auto"},
+            "NDSI_Snow_Cover",
+        )
+    else:
+        unprocessed_ds = open_preprocessed_dataset(
+            unprocessed_fp,
+            {"x": "auto", "y": "auto"},
+            "CGF_NDSI_Snow_Cover",
+        )
+
     snow_metrics = {"cloud_days": count_cloud_occurence(unprocessed_ds)}
 
     unprocessed_ds.close()
@@ -112,7 +124,7 @@ if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "cloud_metrics.log")
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(message)s",
-        # filename=log_file_path,
+        filename=log_file_path,
         level=logging.INFO,
     )
     parser = argparse.ArgumentParser(
@@ -123,12 +135,24 @@ if __name__ == "__main__":
     )
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
     parser.add_argument(
-        "--source_data",
+        "--source-data",
         type=str,
         choices=["CGF", "raw"],
         default="raw",
         help="Source data type (must be 'CGF' or 'raw')",
     )
 
+    parser.add_argument(
+        "--no-preprocess",
+        action="store_false",
+        dest="preprocess",
+        help="Skip preprocessing step (default: preprocess is True)",
+    )
+
     args = parser.parse_args()
-    main(tile_id=args.tile_id, source_data_type=args.source_data)
+
+    main(
+        tile_id=args.tile_id,
+        source_data_type=args.source_data,
+        preprocess=args.preprocess,
+    )
