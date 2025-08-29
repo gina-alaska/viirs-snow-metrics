@@ -416,10 +416,13 @@ def flatten_download_directory(dl_path):
 def validate_download(dl_path, number_tiles_requested, days_requested, n_variables=1):
     """Validate the number of HDF5 files downloaded against the number of tiles expected.
 
-    Days requested is passed to this function to account for months or years as input.
+    Days requested is passed to this function to allow for months or years with differing lengths as input.
 
     Args:
         dl_path (pathlib.Path): The directory path of the download.
+        number_tiles_requested (int): The number of unique tiles requested.
+        days_requested (int): The number of days requested (i.e., days in month or year).
+        n_variables (int): The number of variables expected per tile per day. Default to 1, use 5 for GeoTIFF downloads.
 
     Returns:
         None
