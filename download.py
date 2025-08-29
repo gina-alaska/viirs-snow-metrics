@@ -71,40 +71,6 @@ def check_data_version(ds_short_name):
     return latest_version
 
 
-def determine_tiles_for_bbox(bounding_box):
-    """
-    The granule search API isn't totally reliable: in testing superfluous tiles can be downloaded. Pinging the tile search API endpoint and using the results to trim down the list of granules is helpful.
-
-    Args:
-        bounding_box (str): The bounding box for the geographic area of interest.
-    Returns:
-        set: VIIRS sinusoidal grid tiles that cover the bounding box.
-    """
-    tile_search_url = (
-        f"https://cmr.earthdata.nasa.gov/search/tiles?bounding_box={bounding_box}"
-    )
-    tile_list = requests.get(tile_search_url).json()
-
-    tile_strs = []
-    for tile in tile_list:
-        # hacky zero padding
-        if tile[0] < 10:
-            hstr = f"h0{tile[0]}"
-        else:
-            hstr = f"h{tile[0]}"
-        if tile[1] < 10:
-            vstr = f"v0{tile[1]}"
-        else:
-            vstr = f"v{tile[1]}"
-        tile_str = hstr + vstr
-        tile_strs.append(tile_str)
-    reference_tiles = set(tile_strs)
-    logging.info(
-        f"The following tiles are needed to cover your area of interest: {reference_tiles}"
-    )
-    return reference_tiles
-
-
 def generate_monthly_dl_chunks(snow_year):
     """Generate monthly time intervals for downloading data. A snow year is defined as August 1 to July 31 to this function helps get the correct months lined up with the correct year.
 
@@ -447,10 +413,10 @@ def flatten_download_directory(dl_path):
     logging.info(f"{dl_path} now a flat directory.")
 
 
-def validate_download(dl_path, number_granules_requested):
-    """Validate the download process by warning if file count does not match the number of granules requested. Assuming all variables are requested and a GeoTIFF format, the number of downloaded files should be 5X the granule count (i.e., 5 GeoTIFFs, one per variable, per granule).
+def validate_download(dl_path, number_tiles_requested, days_requested, n_variables=1):
+    """Validate the number of HDF5 files downloaded against the number of tiles expected.
 
-    CP Note: this function is a good practice, but it needs work. I'm retaining this function for now, but it may get moved to a separate module or refactored.
+    Days requested is passed to this function to account for months or years as input.
 
     Args:
         dl_path (pathlib.Path): The directory path of the download.
@@ -458,32 +424,8 @@ def validate_download(dl_path, number_granules_requested):
     Returns:
         None
     """
-    n_variables = 5  # CP note: consider parsing this as a var from the request
     dl_file_count = sum(1 for x in dl_path.rglob("*") if x.is_file())
-    dl_files_expected = number_granules_requested * n_variables
-    logging.info(f"{dl_file_count} files were downloaded.")
-    if dl_file_count != dl_files_expected:
-        logging.warning(
-            f"{dl_file_count} files were downloaded, but based on {number_granules_requested} granules a downloaded file count of {dl_files_expected} is expected."
-        )
-    else:
-        logging.info("Downloaded file count matches expectations.")
-
-
-def validate_download_h5(dl_path, number_tiles_requested):
-    """Validate the number of HDF5 files downloaded against the number of tiles expected. Assuming 365 (or 366) days of data per tile, the number of downloaded files should be 365X (or 366X) the number of tiles requested.
-    Args:
-        dl_path (pathlib.Path): The directory path of the download.
-
-    Returns:
-        None
-    """
-    dl_file_count = sum(1 for x in dl_path.rglob("*") if x.is_file())
-    leap_year = calendar.isleap(int(SNOW_YEAR))
-    if leap_year:
-        dl_files_expected = number_tiles_requested * 366
-    else:
-        dl_files_expected = number_tiles_requested * 365
+    dl_files_expected = number_tiles_requested * days_requested * n_variables
     if dl_file_count != dl_files_expected:
         logging.warning(
             f"{dl_file_count} files were downloaded, but based on {number_tiles_requested} granules a downloaded file count of {dl_files_expected} is expected."
@@ -503,7 +445,6 @@ def download_tif():
         None
     """
     v = check_data_version(short_name)
-    ref_tiles = determine_tiles_for_bbox(viirs_params["bbox"])
     snow_year_chunks = generate_monthly_dl_chunks(int(SNOW_YEAR))
 
     api_session = start_api_session(short_name, v)
@@ -517,7 +458,9 @@ def download_tif():
             time_chunk[1],
             viirs_params["bbox"],
         )
-        filtered_granules = filter_granules_based_on_tiles(granule_list, ref_tiles)
+        filtered_granules = filter_granules_based_on_tiles(
+            granule_list, needed_tile_ids
+        )
 
         page_num, request_mode, page_size = set_n_orders_and_mode_and_page_size(
             filtered_granules
@@ -536,8 +479,18 @@ def download_tif():
         dl_urls = make_async_data_orders(page_num, api_session, dl_params)
         download_order(api_session, dl_urls, snow_year_input_dir)
         flatten_download_directory(snow_year_input_dir)
-        validate_download(snow_year_input_dir, len(granule_list))
+        # Parse month from time_chunk and get number of days in the month
+        start_date = datetime.strptime(time_chunk[0], "%Y-%m-%dT%H:%M:%SZ")
+        month = start_date.month
+        _, days_in_month = calendar.monthrange(int(SNOW_YEAR), month)
+        validate_download(
+            snow_year_input_dir, len(needed_tile_ids), days_in_month, n_variables=5
+        )
 
+    days_in_year = 366 if calendar.isleap(int(SNOW_YEAR)) else 365
+    validate_download(
+        snow_year_input_dir, len(needed_tile_ids), days_in_year, n_variables=5
+    )
     api_session.close()
 
 
@@ -593,10 +546,19 @@ def download_h5(short_name=short_name):
             else:
                 logging.info(f"No files match needed tiles for {time_chunk}. Exiting.")
                 exit(1)
+
+            # Parse month from time_chunk and get number of days in the month
+            start_date = datetime.strptime(time_chunk[0], "%Y-%m-%dT%H:%M:%SZ")
+            month = start_date.month
+            _, days_in_month = calendar.monthrange(int(SNOW_YEAR), month)
+            validate_download(snow_year_input_dir, len(needed_tile_ids), days_in_month)
+
         else:
             logging.info(f"No files found for {time_chunk}. Exiting.")
             exit(1)
-    validate_download_h5(snow_year_input_dir, len(needed_tile_ids))
+
+    days_in_year = 366 if calendar.isleap(int(SNOW_YEAR)) else 365
+    validate_download(snow_year_input_dir, len(needed_tile_ids), days_in_year)
 
 
 if __name__ == "__main__":
@@ -632,4 +594,5 @@ if __name__ == "__main__":
         download_tif()
     else:
         download_h5(short_name=short_name)
+
     print("Download Script Complete.")
