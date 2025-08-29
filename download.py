@@ -470,6 +470,28 @@ def validate_download(dl_path, number_granules_requested):
         logging.info("Downloaded file count matches expectations.")
 
 
+def validate_download_h5(dl_path, number_tiles_requested):
+    """Validate the number of HDF5 files downloaded against the number of tiles expected. Assuming 365 (or 366) days of data per tile, the number of downloaded files should be 365X (or 366X) the number of tiles requested.
+    Args:
+        dl_path (pathlib.Path): The directory path of the download.
+
+    Returns:
+        None
+    """
+    dl_file_count = sum(1 for x in dl_path.rglob("*") if x.is_file())
+    leap_year = calendar.isleap(int(SNOW_YEAR))
+    if leap_year:
+        dl_files_expected = number_tiles_requested * 366
+    else:
+        dl_files_expected = number_tiles_requested * 365
+    if dl_file_count != dl_files_expected:
+        logging.warning(
+            f"{dl_file_count} files were downloaded, but based on {number_tiles_requested} granules a downloaded file count of {dl_files_expected} is expected."
+        )
+    else:
+        logging.info("Downloaded file count matches expectations.")
+
+
 def download_tif():
     """Wrapper function to download GeoTIFF files. Uses methods for conversion and reprojection that will not be available for future datasets.
     These methods are retained for legacy support and may cease to function properly in the future.
@@ -574,6 +596,7 @@ def download_h5(short_name=short_name):
         else:
             logging.info(f"No files found for {time_chunk}. Exiting.")
             exit(1)
+    validate_download_h5(snow_year_input_dir, len(needed_tile_ids))
 
 
 if __name__ == "__main__":
