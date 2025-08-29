@@ -33,7 +33,7 @@ from shared_utils import (
 def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
     """Shifts day-of-year values to day-of-snow-year values.
 
-    Day-of-snow-year values mimic familiar day-of-year values (i.e., 1 to 365) but span two calendar years (e.g., the first day of the second calendar year = 1 + 365 = 366). A snow year is defined as August 1 through July 31, and so possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year (212 + 365) = 577. When $SNOW_YEAR + 1 is a leap year, the maximum value may be 578.
+    Day-of-snow-year values mimic familiar day-of-year values (i.e., 1 to 365) but span two calendar years (e.g., the first day of the second calendar year = 1 + 365 = 366). A snow year is defined as August 1 through July 31, and so possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year (212 + 365) = 577. When $SNOW_YEAR is a leap year, the maximum value may be 578.
 
     Args:
         doy_arr (array-like): Day-of-year values.
@@ -43,7 +43,7 @@ def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
         array-like: Day-of-snow-year values.
     """
 
-    leap_year = calendar.isleap(int(SNOW_YEAR) + 1)
+    leap_year = calendar.isleap(int(SNOW_YEAR))
     if leap_year and needs_leap_shift:
         doy_arr += 213
     else:
