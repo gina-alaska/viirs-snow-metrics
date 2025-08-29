@@ -18,6 +18,13 @@ from shared_utils import (
 
 
 def parse_metadata(hdf):
+    """Parse the metadata from the HDF5 file to extract the upper left and lower right coordinates.
+
+    Args:
+        hdf (h5py.File): The HDF5 file object.
+    Returns:
+        tuple: A tuple containing the upper left x, upper left y, lower right x, and lower right y coordinates as strings.
+    """
     gridmeta = hdf["HDFEOS INFORMATION"]["StructMetadata.0"][()].decode("ascii")
 
     ul_regex = re.compile(
@@ -47,6 +54,15 @@ def parse_metadata(hdf):
 
 
 def project_dataset(data_array, epsg):
+    """Reproject a rioxarray object to the specified EPSG code.
+
+    Args:
+        data_array (rioxarray.raster_array.RasterArray or xarray.DataArray): The rioxarray object to reproject.
+        epsg (int): The EPSG code to reproject to.
+
+    Returns:
+        rioxarray.raster_array.RasterArray or xarray.DataArray: The reprojected rioxarray object.
+    """
     target_crs = pyproj.CRS.from_epsg(epsg)
     if target_crs.axis_info[0].unit_name in ["metre", "meter"]:
         resolution = 375
@@ -59,6 +75,13 @@ def project_dataset(data_array, epsg):
 
 
 def add_overviews(output_path):
+    """Add internal overviews to a GeoTIFF file.
+    Args:
+        output_path (str or Path): The path to the GeoTIFF file.
+
+    Returns:
+        None
+    """
     import rasterio
 
     with rasterio.open(output_path, "r+") as ds:
@@ -131,7 +154,7 @@ def main():
             if epsg:
                 da = project_dataset(da, epsg)
             output_path = output_dir / (".".join([da.name, hdf5_path.stem, "tif"]))
-            convert_data_array_to_geotiff(da, output_path)
+            convert_data_array_to_geotiff(da, output_path, dtype=da.dtype)
 
             if overviews:
                 print("Generating internal overviews")
