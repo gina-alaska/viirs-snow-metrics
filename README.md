@@ -131,6 +131,12 @@ Convert an HDF5 file into GeoTIFF files for each data variable. Useful for visua
 ##### Example Usage
 `convert_nsidc_h5_to_geotiff.py /path/to/snow_year_input_dir/VNP10A1F.A2013013.h10v02.002.2023165001632.h5 --output-dir /path/to/output/dir/ --epsg 3338 `
 
+#### `create_preprocessed_ds_and_compute_cloud_days.py`
+Standalone script to create preprocessed dataset (as needed - use the `--no-preprocess` flag to skip) and compute cloud days. Created to allow a user to compute cloud days from the non-CGF data product (i.e. VNP10A1 instead of VNP10A1F). Can also be used as a template if other metrics need to be examined. To use with non-CGF data, a user can set up a new set of input/scratch/output directories, then run `download.py --short_name VNP10A1` and this script to produce the preprocessed dataset (which gets tagged with "_raw") and a geotiff for cloud_days.
+##### Example Usage
+`create_preprocessed_ds_and_compute_cloud_days.py h11v02`
+`create_preprocessed_ds_and_compute_cloud_days.py --source-data CGF --no-preprocess
+
 #### `remove_scratch_geotiffs.py`
 Utility function to remove intermediate GeoTIFF files. Counts number of matching files and prompts for user input before deleting.
 
