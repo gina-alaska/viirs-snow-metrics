@@ -400,7 +400,17 @@ def make_sorted_h5_stack(
 
 
 def convert_data_array_to_geotiff(data_array, output_path, **kwargs):
-    print(f"Exporting {data_array.name} as {output_path.name}...")
+    """Write a RioXarray DataArray to a GeoTIFF file.
+
+    Args:
+        data_array (xarray.core.dataarray.DataArray): The data array to be written.
+        output_path (Path): The path to the output GeoTIFF file.
+        **kwargs: Options passed to rio.to_raster()
+    Returns:
+        None
+
+    """
+
     if not data_array.rio.crs:
         print("Warning: No CRS in data array")
     output_params = {
@@ -411,7 +421,7 @@ def convert_data_array_to_geotiff(data_array, output_path, **kwargs):
     }
     output_params.update(kwargs)
     data_array.rio.to_raster(output_path, **output_params)
-    print("Export complete.")
+    return None
 
 
 def write_tagged_geotiff_from_data_array(

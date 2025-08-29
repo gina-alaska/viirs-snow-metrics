@@ -78,7 +78,7 @@ output_dir_env = os.getenv("OUTPUT_DIR")
 if output_dir_env is None:
     raise EnvironmentError("Environment variable OUTPUT_DIR is not set.")
 OUTPUT_DIR = Path(output_dir_env)
-OUTPUT_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 # subdirectory for metrics files
 metrics_dir = OUTPUT_DIR.joinpath("viirs_snow_metrics")
 metrics_dir.mkdir(exist_ok=True)

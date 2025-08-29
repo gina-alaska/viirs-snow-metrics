@@ -426,7 +426,6 @@ if __name__ == "__main__":
         description="Compute metrics for cloud and polar/winter darkness periods."
     )
     parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
-    # optional argument to compute metrics for a smoothed dataset
     parser.add_argument(
         "--format",
         "-f",
@@ -434,6 +433,7 @@ if __name__ == "__main__":
         default="h5",
         help="Download/input File format: Older processing methods use tif, newer uses h5",
     )
+    # optional argument to compute metrics for a smoothed dataset
     parser.add_argument(
         "--smoothed_input", type=str, help="Suffix of smoothed input file."
     )

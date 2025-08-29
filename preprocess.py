@@ -211,12 +211,13 @@ def create_single_tile_dataset(tile_di, tile):
     return ds
 
 
-def create_single_tile_dataset_from_h5(tile_di, tile):
+def create_single_tile_dataset_from_h5(tile_di, tile, data_variables=data_variables):
     """Create a time-indexed netCDF dataset for an entire snow year's worth of data for a single VIIRS tile.
 
     Args:
        tile_di (dict): A dictionary mapping tiles and data variables to file paths.
        tile (str): The tile to create the dataset for.
+       data_variables (list): List of data variables to include in the dataset.
 
     Returns:
        xarray.Dataset: The single-tile dataset.
