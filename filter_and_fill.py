@@ -103,7 +103,11 @@ def fill_obscured_values_with_adjacent_observations(snow_data, sections_to_fill)
         last_valid_before = snow_data[section.start - 1]
 
         # get first valid observation after obscured period is over
-        first_valid_after = snow_data[section.stop]
+        first_valid_after = (
+            snow_data[section.stop + 1]
+            if section.stop + 1 < snow_data.shape[0]
+            else snow_data[section.stop]
+        )
 
         # get median index (halfway point) of the obscured period
         halfway_point = (section.start + section.stop) // 2
@@ -189,7 +193,11 @@ def apply_filter_and_fill_to_masked_sections(
 
 if __name__ == "__main__":
     log_file_path = os.path.join(os.path.expanduser("~"), "filter_and_fill.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
     parser = argparse.ArgumentParser(
         description="Script to filter data where low illumination conditions are present and to fill data gaps produced by Cloud or Night conditions."
     )
@@ -202,7 +210,7 @@ if __name__ == "__main__":
 
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
     snow_ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover", decode_coords="all"
     )
     bitflag_ds = open_preprocessed_dataset(
         fp, {"x": "auto", "y": "auto"}, "Algorithm_Bit_Flags_QA"
@@ -217,9 +225,14 @@ if __name__ == "__main__":
     filtered_and_filled_data = apply_filter_and_fill_to_masked_sections(
         snow_ds, mask_data, window_length=5, polyorder=1
     ).compute()
+    if snow_ds.rio.crs:
+        filtered_and_filled_data.rio.write_crs(snow_ds.rio.crs, inplace=True)
     snow_ds.close()  # expect context, but still paranoid so manually closing
 
     filtered_and_filled_data.name = "CGF_NDSI_Snow_Cover"
+    logging.info(
+        f"Writing {preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"}..."
+    )
     write_single_tile_xrdataset(filtered_and_filled_data, tile_id, "filtered_filled")
 
     client.close()

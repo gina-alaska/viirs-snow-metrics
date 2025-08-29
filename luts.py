@@ -1,6 +1,35 @@
 """Look-Up Tables and Parameters for VIIRS Snow Metric Computations"""
 
+product_version = "v001"
+
 short_name = "VNP10A1F"
+
+needed_tile_ids = {
+    "h06v03",
+    "h07v03",
+    "h08v03",
+    "h09v02",
+    "h09v03",
+    "h10v02",
+    "h10v03",
+    "h11v01",
+    "h11v02",
+    "h11v03",
+    "h12v01",
+    "h12v02",
+    "h13v01",
+    "h13v02",
+    "h23v01",
+    "h23v02",
+    "h24v01",
+    "h24v02",
+    "h25v02",
+    "h26v02",
+    "h26v03",
+    "h27v03",
+    "h28v03",
+    "h29v03",
+}
 
 parameter_sets = {
     "prod_params": {
@@ -31,7 +60,22 @@ cgf_snow_cover_codes = {
 # CP note: inverting above to reference array values by the descriptive string
 inv_cgf_codes = {v: k for k, v in cgf_snow_cover_codes.items()}
 
-snow_cover_threshold = 50
+snow_cover_threshold = 20
 n_obs_to_classify_ocean = 10
 n_obs_to_classify_inland_water = 10
 css_days_threshold = 14
+
+modis_bounds = [-1805447.821, 374524.164, 1712552.179, 2570024.164]
+
+stack_order = [
+    "first_snow_day",
+    "last_snow_day",
+    "fss_range",
+    "longest_css_start",
+    "longest_css_end",
+    "longest_css_range",
+    "snow_days",
+    "no_snow_days",
+    "css_segment_num",
+    "tot_css_days",
+]

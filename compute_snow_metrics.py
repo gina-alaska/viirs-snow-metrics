@@ -33,7 +33,7 @@ from shared_utils import (
 def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
     """Shifts day-of-year values to day-of-snow-year values.
 
-    Day-of-snow-year values mimic familiar day-of-year values (i.e., 1 to 365) but span two calendar years (e.g., the first day of the second calendar year = 1 + 365 = 366). A snow year is defined as August 1 through July 31, and so possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year (212 + 365) = 577. When $SNOW_YEAR + 1 is a leap year, the maximum value may be 578.
+    Day-of-snow-year values mimic familiar day-of-year values (i.e., 1 to 365) but span two calendar years (e.g., the first day of the second calendar year = 1 + 365 = 366). A snow year is defined as August 1 through July 31, and so possible values for day-of-snow-year are 213 to 577 (1 August is day of year 213; 31 July is day of year (212 + 365) = 577. When $SNOW_YEAR is a leap year, the maximum value may be 578.
 
     Args:
         doy_arr (array-like): Day-of-year values.
@@ -43,7 +43,7 @@ def shift_to_day_of_snow_year_values(doy_arr, needs_leap_shift=False):
         array-like: Day-of-snow-year values.
     """
 
-    leap_year = calendar.isleap(int(SNOW_YEAR) + 1)
+    leap_year = calendar.isleap(int(SNOW_YEAR))
     if leap_year and needs_leap_shift:
         doy_arr += 213
     else:
@@ -240,38 +240,7 @@ def compute_css_metrics(snow_on):
     return css_metric_dict
 
 
-if __name__ == "__main__":
-    log_file_path = os.path.join(os.path.expanduser("~"), "snow_metric_computation.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
-    parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
-    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
-    parser.add_argument(
-        "--alt_input",
-        type=str,
-        help="Alternate input file indicated by filename suffix.",
-    )
-    args = parser.parse_args()
-    tile_id = args.tile_id
-    logging.info(f"Computing snow metrics for tile {tile_id}.")
-    # A Dask LocalCluster speeds this script up 10X
-    client = Client(n_workers=9)
-    print("Monitor the Dask client dashboard for progress at the link below:")
-    print(client.dashboard_link)
-    if args.alt_input is not None:
-        alt_input = args.alt_input
-        logging.info(f"Using alternate input file: {alt_input}")
-        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{alt_input}.nc"
-        chunky_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-        )
-        output_tag = alt_input
-    else:
-        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
-        chunky_ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
-        )
-
-    logging.info(f"Applying Snow Cover Threshold...")
+def process_snow_metrics(chunky_ds, combined_mask):
     snow_is_on = apply_threshold(chunky_ds)
     snow_metrics = dict()
     snow_metrics.update({"first_snow_day": get_first_snow_day_array(snow_is_on)})
@@ -289,12 +258,43 @@ if __name__ == "__main__":
     snow_metrics.update(compute_css_metrics(snow_is_on))
 
     # iterate through keys in snow_metrics dict and apply mask
-    combined_mask = mask_dir / f"{tile_id}__mask_combined_{SNOW_YEAR}.tif"
     for metric_name, metric_array in snow_metrics.items():
         snow_metrics[metric_name] = apply_mask(combined_mask, metric_array)
+    return snow_metrics
+
+
+def main(tile_id, format, alt_input=None):
+    logging.info(f"Computing snow metrics for tile {tile_id}.")
+    # A Dask LocalCluster speeds this script up 10X
+    client = Client(n_workers=9)
+    print("Monitor the Dask client dashboard for progress at the link below:")
+    print(client.dashboard_link)
+
+    if alt_input is not None:
+        logging.info(f"Using alternate input file: {alt_input}")
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_{alt_input}.nc"
+        chunky_ds = open_preprocessed_dataset(
+            fp,
+            {"x": "auto", "y": "auto"},
+            "CGF_NDSI_Snow_Cover",
+        )
+        output_tag = alt_input
+    else:
+        fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
+        chunky_ds = open_preprocessed_dataset(
+            fp,
+            {"x": "auto", "y": "auto"},
+            "CGF_NDSI_Snow_Cover",
+        )
+
+    logging.info(f"Applying Snow Cover Threshold...")
+
+    combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
+
+    snow_metrics = process_snow_metrics(chunky_ds, combined_mask)
 
     single_metric_profile = fetch_raster_profile(
-        tile_id, {"dtype": "int16", "nodata": 0}
+        tile_id, {"dtype": "int16", "nodata": 0}, format=format
     )
     for metric_name, metric_array in snow_metrics.items():
         write_tagged_geotiff(
@@ -306,6 +306,34 @@ if __name__ == "__main__":
             metric_array.compute().values.astype("int16"),
             # don't have to call .compute(), but communicates a chunked DataArray input
         )
+
     client.close()
     chunky_ds.close()
+
+
+if __name__ == "__main__":
+    log_file_path = os.path.join(os.path.expanduser("~"), "snow_metric_computation.log")
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
+    parser = argparse.ArgumentParser(description="Snow Metric Computation Script")
+    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["tif", "h5"],
+        default="h5",
+        help="Download/input File format: Older processing methods use tif, newer uses h5",
+    )
+    parser.add_argument(
+        "--alt_input",
+        type=str,
+        help="Alternate input file indicated by filename suffix.",
+    )
+    args = parser.parse_args()
+
+    main(args.tile_id, args.format, args.alt_input)
+
     print("Snow Metric Computation Script Complete.")

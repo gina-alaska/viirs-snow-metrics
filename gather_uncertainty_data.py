@@ -91,15 +91,7 @@ def get_max_cloud_persistence(ds_chunked):
     return max_cloud_persist
 
 
-if __name__ == "__main__":
-    log_file_path = os.path.join(os.path.expanduser("~"), "source_data_uncertainty.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
-    parser = argparse.ArgumentParser(
-        description="Script to Fetch Data For Uncertainty Analysis"
-    )
-    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
-    args = parser.parse_args()
-    tile_id = args.tile_id
+def main(tile_id, format="h5"):
     logging.info(
         f"Gathering uncertainty data for tile {tile_id} for snow year {SNOW_YEAR}."
     )
@@ -108,7 +100,9 @@ if __name__ == "__main__":
     fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
 
     cgf_snow_ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        fp,
+        {"x": "auto", "y": "auto"},
+        "CGF_NDSI_Snow_Cover",
     )
     uncertainty_data.update({"no decision": count_no_decision_occurence(cgf_snow_ds)})
     uncertainty_data.update({"missing L1B": count_missing_l1b_occurence(cgf_snow_ds)})
@@ -124,7 +118,9 @@ if __name__ == "__main__":
     )
     cloud_ds.close()
 
-    out_profile = fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0})
+    out_profile = fetch_raster_profile(
+        tile_id, {"dtype": "int16", "nodata": 0}, format=format
+    )
 
     for uncertainty_name, uncertainty_array in uncertainty_data.items():
         if uncertainty_array.sum().compute() == 0:
@@ -142,4 +138,27 @@ if __name__ == "__main__":
         )
 
     client.close()
+
+
+if __name__ == "__main__":
+    log_file_path = os.path.join(os.path.expanduser("~"), "source_data_uncertainty.log")
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
+    parser = argparse.ArgumentParser(
+        description="Script to Fetch Data For Uncertainty Analysis"
+    )
+    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["tif", "h5"],
+        default="h5",
+        help="Download/input File format: Older processing methods use tif, newer uses h5",
+    )
+    args = parser.parse_args()
+    main(tile_id=args.tile_id, format=args.format)
+
     print("Uncertainty Data Fetch Complete.")

@@ -213,8 +213,13 @@ def get_snow_transition_cases(snow_is_on_at_dusk, snow_is_on_at_dawn):
     ]
     # mapped to the above
     numeric_transition_cases = [1, 2, 3]
-    snow_transition_cases = np.select(
-        transition_cases, numeric_transition_cases, default=0
+    # snow_transition_cases = np.select(
+    #    transition_cases, numeric_transition_cases, default=0
+    # )
+    snow_transition_cases = xr.where(
+        snow_did_not_flip,
+        1,
+        xr.where(snow_flipped_off_to_on, 2, xr.where(snow_flipped_on_to_off, 3, 0)),
     )
     return snow_transition_cases
 
@@ -299,17 +304,24 @@ def create_dark_metric_computation(dark_tag, dark_is_on, chunky_ds, tag_prefix=N
     return dark_metrics
 
 
-def write_dark_metric(dark_metric_name, computation_di):
+def write_dark_metric(
+    dark_metric_name,
+    computation_di,
+    tile_id,
+    combined_mask,
+    out_profile=None,
+):
     """Trigger the dark metric computation and write to disk with `write_tagged_geotiff`
-    
+
     Args:
         dark_metric_name (str): name of the dark metric to compute, must be key of computation_di
         computation_di (dict): dict of computations generate with create_dark_metric_computation
-    Returns: 
+    Returns:
         None: writes data to GeoTIFF file
     """
 
     dark_metric_arr = computation_di[dark_metric_name].compute()
+
     write_tagged_geotiff(
         uncertainty_dir,
         tile_id,
@@ -318,22 +330,10 @@ def write_dark_metric(dark_metric_name, computation_di):
         out_profile,
         apply_mask(combined_mask, dark_metric_arr).astype("int16"),
     )
+    return None
 
 
-if __name__ == "__main__":
-    log_file_path = os.path.join(os.path.expanduser("~"), "dark_and_cloud_metrics.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
-    parser = argparse.ArgumentParser(
-        description="Compute metrics for cloud and polar/winter darkness periods."
-    )
-    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
-    # optional argument to compute metrics for a smoothed dataset
-    parser.add_argument(
-        "--smoothed_input", type=str, help="Suffix of smoothed input file."
-    )
-    args = parser.parse_args()
-    tile_id = args.tile_id
-    smoothed_input = args.smoothed_input
+def main(tile_id, smoothed_input=None, format="h5"):
     logging.info(
         f"Computing winter darkness and cloud cover metrics for tile {tile_id}."
     )
@@ -348,15 +348,25 @@ if __name__ == "__main__":
     else:
         fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
         ds = open_preprocessed_dataset(
-            fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+            fp,
+            {"x": "auto", "y": "auto"},
+            "CGF_NDSI_Snow_Cover",
         )
         output_tag = "raw"
-
     # intialize input and output parameters
-    out_profile = fetch_raster_profile(tile_id, {"dtype": "int16", "nodata": 0})
-    combined_mask = mask_dir / f"{tile_id}__mask_combined_{SNOW_YEAR}.tif"
+    out_profile = fetch_raster_profile(
+        tile_id, updates={"dtype": "int16", "nodata": 0}, format=format
+    )
 
-    for darkness_source in ["Night"]:  # , "Cloud"]:
+    combined_mask = mask_dir / f"{tile_id}_mask_combined_{SNOW_YEAR}.tif"
+
+    writing_kwargs = {
+        "tile_id": tile_id,
+        "combined_mask": combined_mask,
+        "out_profile": out_profile,
+    }
+
+    for darkness_source in ["Night", "Cloud"]:
         tag = darkness_source.lower()
         di_tag = f"{output_tag}_{darkness_source.lower()}"
 
@@ -366,21 +376,65 @@ if __name__ == "__main__":
         )
 
         # these are relatively rapid computes
-        write_dark_metric(f"{di_tag}_obscured_day_count", dark_computation_di)
         write_dark_metric(
-            f"dusk_index_of_last_obs_prior_to_{di_tag}", dark_computation_di
+            f"{di_tag}_obscured_day_count", dark_computation_di, **writing_kwargs
         )
         write_dark_metric(
-            f"dawn_index_of_first_obs_after_{di_tag}", dark_computation_di
+            f"dusk_index_of_last_obs_prior_to_{di_tag}",
+            dark_computation_di,
+            **writing_kwargs,
         )
-        write_dark_metric(f"median_index_of_{di_tag}_period", dark_computation_di)
+        write_dark_metric(
+            f"dawn_index_of_first_obs_after_{di_tag}",
+            dark_computation_di,
+            **writing_kwargs,
+        )
+        write_dark_metric(
+            f"median_index_of_{di_tag}_period", dark_computation_di, **writing_kwargs
+        )
         # more memory intensive because they rely on computing the above indices
-        write_dark_metric(f"value_at_{di_tag}_dusk", dark_computation_di)
-        write_dark_metric(f"value_at_{di_tag}_dawn", dark_computation_di)
-        write_dark_metric(f"snow_is_on_at_{di_tag}_dusk", dark_computation_di)
-        write_dark_metric(f"snow_is_on_at_{di_tag}_dawn", dark_computation_di)
-        write_dark_metric(f"snow_transition_cases_{di_tag}", dark_computation_di)
+        write_dark_metric(
+            f"value_at_{di_tag}_dusk", dark_computation_di, **writing_kwargs
+        )
+        write_dark_metric(
+            f"value_at_{di_tag}_dawn", dark_computation_di, **writing_kwargs
+        )
+        write_dark_metric(
+            f"snow_is_on_at_{di_tag}_dusk", dark_computation_di, **writing_kwargs
+        )
+        write_dark_metric(
+            f"snow_is_on_at_{di_tag}_dawn", dark_computation_di, **writing_kwargs
+        )
+        write_dark_metric(
+            f"snow_transition_cases_{di_tag}", dark_computation_di, **writing_kwargs
+        )
 
     client.close()
     ds.close()
     print("Computation of cloud and darkness metrics complete.")
+
+
+if __name__ == "__main__":
+    log_file_path = os.path.join(os.path.expanduser("~"), "dark_and_cloud_metrics.log")
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
+    parser = argparse.ArgumentParser(
+        description="Compute metrics for cloud and polar/winter darkness periods."
+    )
+    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["tif", "h5"],
+        default="h5",
+        help="Download/input File format: Older processing methods use tif, newer uses h5",
+    )
+    # optional argument to compute metrics for a smoothed dataset
+    parser.add_argument(
+        "--smoothed_input", type=str, help="Suffix of smoothed input file."
+    )
+    args = parser.parse_args()
+    main(tile_id=args.tile_id, smoothed_input=args.smoothed_input, format=args.format)

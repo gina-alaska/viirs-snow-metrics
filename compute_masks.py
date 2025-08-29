@@ -5,6 +5,7 @@ import logging
 import os
 
 import numpy as np
+import xarray as xr
 from dask.distributed import Client
 
 from config import SNOW_YEAR, preprocessed_dir, mask_dir
@@ -88,23 +89,22 @@ def combine_masks(mask_list):
         xarray.DataArray: The combined mask of grid cells.
     """
     logging.info("Combining masks...")
-    masks_combined = np.all(mask_list, axis=0)
+    # masks_combined = np.all(mask_list, axis=0) ## Returned np.Array - revised to return xr.DataArray
+    masks_combined = xr.concat(mask_list, dim="temp_dim").all(dim="temp_dim")
     return masks_combined
 
 
-if __name__ == "__main__":
-    log_file_path = os.path.join(os.path.expanduser("~"), "mask_computation.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+def main(tile_id, format="h5"):
 
-    parser = argparse.ArgumentParser(description="Script to Generate Masks")
-    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
-    args = parser.parse_args()
     tile_id = args.tile_id
     logging.info(f"Creating masks for tile {tile_id} for snow year {SNOW_YEAR}.")
     client = Client(n_workers=24)
-    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}.nc"
+    fp = preprocessed_dir / f"snow_year_{SNOW_YEAR}_{tile_id}_filtered_filled.nc"
+
     ds = open_preprocessed_dataset(
-        fp, {"x": "auto", "y": "auto"}, "CGF_NDSI_Snow_Cover"
+        fp,
+        {"x": "auto", "y": "auto"},
+        "CGF_NDSI_Snow_Cover",
     )
 
     ocean_mask = generate_ocean_mask(ds)
@@ -112,14 +112,22 @@ if __name__ == "__main__":
     l2_mask = generate_l2fill_mask(ds)
     combined_mask = combine_masks([ocean_mask, inland_water_mask, l2_mask])
 
-    mask_profile = fetch_raster_profile(tile_id, {"dtype": "int8", "nodata": 0})
+    mask_profile = fetch_raster_profile(
+        tile_id, {"dtype": "int8", "nodata": 0}, format=format
+    )
+
     write_tagged_geotiff(
-        mask_dir, tile_id, "_mask", "ocean", mask_profile, ocean_mask.values
+        mask_dir,
+        tile_id,
+        "mask",
+        "ocean",
+        mask_profile,
+        ocean_mask.values,
     )
     write_tagged_geotiff(
         mask_dir,
         tile_id,
-        "_mask",
+        "mask",
         "inland_water",
         mask_profile,
         inland_water_mask.values,
@@ -127,14 +135,41 @@ if __name__ == "__main__":
     write_tagged_geotiff(
         mask_dir,
         tile_id,
-        "_mask",
+        "mask",
         "l2_fill",
         mask_profile,
         l2_mask.values,
     )
     write_tagged_geotiff(
-        mask_dir, tile_id, "_mask", "combined", mask_profile, combined_mask
+        mask_dir,
+        tile_id,
+        "mask",
+        "combined",
+        mask_profile,
+        combined_mask.values,
     )
     ds.close()
     client.close()
+
+
+if __name__ == "__main__":
+    log_file_path = os.path.join(os.path.expanduser("~"), "mask_computation.log")
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
+
+    parser = argparse.ArgumentParser(description="Script to Generate Masks")
+    parser.add_argument("tile_id", type=str, help="VIIRS Tile ID (ex. h11v02)")
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["tif", "h5"],
+        default="h5",
+        help="Download/input File format: Older processing methods use tif, newer uses h5",
+    )
+    args = parser.parse_args()
+    main(tile_id=args.tile_id, format=args.format)
+
     print("Mask Generation Script Complete.")

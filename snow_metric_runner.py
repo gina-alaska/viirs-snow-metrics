@@ -5,28 +5,40 @@ import subprocess
 import argparse
 
 from config import snow_year_input_dir
-from shared_utils import list_input_files, parse_tile
+from shared_utils import list_input_files, parse_tile, parse_tile_h5
+from luts import needed_tile_ids, short_name
 
 
-def trigger_download():
-    os.system("python ./download.py")
+def trigger_download(format="h5", short_name=short_name):
+
+    os.system(f"python ./download.py --f {format} --short_name {short_name}")
     print("Download complete.")
 
 
-def get_unique_tiles_in_input_directory():
+def get_unique_tiles_in_input_directory(format="h5"):
     """Get the unique tiles in the input directory.
 
     Returns:
         list: A list of unique tiles in the input directory.
     """
-    fps = list_input_files(snow_year_input_dir)
-    tiles_to_process = set([parse_tile(fp) for fp in fps])
+    if format == "h5":
+        fps = list_input_files(snow_year_input_dir, extension="*.h5")
+        tiles_to_process = set([parse_tile_h5(fp) for fp in fps])
+    else:
+        fps = list_input_files(snow_year_input_dir)
+        tiles_to_process = set([parse_tile(fp) for fp in fps])
     return list(tiles_to_process)
 
 
-def trigger_preprocess(tile_id):
-    result = subprocess.check_output(["python", "./preprocess.py", tile_id])
-    print(result)
+def trigger_preprocess(tile_id, format="h5"):
+    script = "./preprocess.py"
+    try:
+        result = subprocess.check_output(
+            ["python", script, tile_id, format], stderr=subprocess.STDOUT
+        )
+        print(result)
+    except subprocess.CalledProcessError as e:
+        print("Error occurred:", e.output.decode())
     print("Preprocessing complete.")
 
 
@@ -41,10 +53,11 @@ def trigger_filter_fill(tile_id):
     print("Filter and fill complete.")
 
 
-def trigger_compute_masks(tile_id):
+def trigger_compute_masks(tile_id, format="h5"):
+    script = "./compute_masks.py"
     try:
         result = subprocess.check_output(
-            ["python", "./compute_masks.py", tile_id], stderr=subprocess.STDOUT
+            ["python", script, tile_id, format], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
@@ -52,10 +65,11 @@ def trigger_compute_masks(tile_id):
     print("Mask computation complete.")
 
 
-def trigger_compute_snow_metrics(tile_id):
+def trigger_compute_snow_metrics(tile_id, format="h5"):
+    script = "./compute_snow_metrics.py"
     try:
         result = subprocess.check_output(
-            ["python", "./compute_snow_metrics.py", tile_id], stderr=subprocess.STDOUT
+            ["python", script, tile_id, format], stderr=subprocess.STDOUT
         )
         print(result)
     except subprocess.CalledProcessError as e:
@@ -96,26 +110,35 @@ if __name__ == "__main__":
     parser.add_argument(
         "--postprocess", action="store_true", help="Trigger postprocessing"
     )
+    parser.add_argument(
+        "--format",
+        choices=["tif", "h5"],
+        default="h5",
+        help="Download/input File format: Older processing run downloads and uses tif, newer downloads and uses h5",
+    )
 
     args = parser.parse_args()
+    format = args.format
 
     if args.download:
-        trigger_download()
+        trigger_download(format)
 
-    tile_ids = get_unique_tiles_in_input_directory()
+    tile_ids = get_unique_tiles_in_input_directory(format)
     for tile_id in tile_ids:
-        print(tile_id)
+        if tile_id not in needed_tile_ids:
+            continue
+        print(f"Processing tile {tile_id}...")
         if args.preprocess:
-            trigger_preprocess(tile_id)
+            trigger_preprocess(tile_id, format)
 
         if args.filter_fill:
             trigger_filter_fill(tile_id)
 
         if args.compute_masks:
-            trigger_compute_masks(tile_id)
+            trigger_compute_masks(tile_id, format)
 
         if args.compute_metrics:
-            trigger_compute_snow_metrics(tile_id)
+            trigger_compute_snow_metrics(tile_id, format)
 
     if args.postprocess:
         trigger_postprocess()

@@ -17,7 +17,7 @@ from statistics import mean
 from xml.etree import ElementTree as ET
 from datetime import datetime, timedelta
 
-from luts import short_name
+from luts import short_name, needed_tile_ids
 from config import viirs_params, snow_year_input_dir, SNOW_YEAR
 
 
@@ -71,40 +71,6 @@ def check_data_version(ds_short_name):
     return latest_version
 
 
-def determine_tiles_for_bbox(bounding_box):
-    """
-    The granule search API isn't totally reliable: in testing superfluous tiles can be downloaded. Pinging the tile search API endpoint and using the results to trim down the list of granules is helpful.
-
-    Args:
-        bounding_box (str): The bounding box for the geographic area of interest.
-    Returns:
-        set: VIIRS sinusoidal grid tiles that cover the bounding box.
-    """
-    tile_search_url = (
-        f"https://cmr.earthdata.nasa.gov/search/tiles?bounding_box={bounding_box}"
-    )
-    tile_list = requests.get(tile_search_url).json()
-
-    tile_strs = []
-    for tile in tile_list:
-        # hacky zero padding
-        if tile[0] < 10:
-            hstr = f"h0{tile[0]}"
-        else:
-            hstr = f"h{tile[0]}"
-        if tile[1] < 10:
-            vstr = f"v0{tile[1]}"
-        else:
-            vstr = f"v{tile[1]}"
-        tile_str = hstr + vstr
-        tile_strs.append(tile_str)
-    reference_tiles = set(tile_strs)
-    logging.info(
-        f"The following tiles are needed to cover your area of interest: {reference_tiles}"
-    )
-    return reference_tiles
-
-
 def generate_monthly_dl_chunks(snow_year):
     """Generate monthly time intervals for downloading data. A snow year is defined as August 1 to July 31 to this function helps get the correct months lined up with the correct year.
 
@@ -115,7 +81,7 @@ def generate_monthly_dl_chunks(snow_year):
     """
     intervals = []
     for month in range(1, 13):
-        year = snow_year if month >= 8 else snow_year + 1
+        year = snow_year - 1 if month >= 8 else snow_year
         start_date = datetime(year, month, 1)
         _, last_day = calendar.monthrange(year, month)
         end_date = datetime(year, month, last_day, 23, 59, 59)
@@ -447,37 +413,41 @@ def flatten_download_directory(dl_path):
     logging.info(f"{dl_path} now a flat directory.")
 
 
-def validate_download(dl_path, number_granules_requested):
-    """Validate the download process by warning if file count does not match the number of granules requested. Assuming all variables are requested and a GeoTIFF format, the number of downloaded files should be 5X the granule count (i.e., 5 GeoTIFFs, one per variable, per granule).
+def validate_download(dl_path, number_tiles_requested, days_requested, n_variables=1):
+    """Validate the number of HDF5 files downloaded against the number of tiles expected.
 
-    CP Note: this function is a good practice, but it needs work. I'm retaining this function for now, but it may get moved to a separate module or refactored.
+    Days requested is passed to this function to allow for months or years with differing lengths as input.
 
     Args:
         dl_path (pathlib.Path): The directory path of the download.
+        number_tiles_requested (int): The number of unique tiles requested.
+        days_requested (int): The number of days requested (i.e., days in month or year).
+        n_variables (int): The number of variables expected per tile per day. Default to 1, use 5 for GeoTIFF downloads.
 
     Returns:
         None
     """
-    n_variables = 5  # CP note: consider parsing this as a var from the request
     dl_file_count = sum(1 for x in dl_path.rglob("*") if x.is_file())
-    dl_files_expected = number_granules_requested * n_variables
-    logging.info(f"{dl_file_count} files were downloaded.")
+    dl_files_expected = number_tiles_requested * days_requested * n_variables
     if dl_file_count != dl_files_expected:
         logging.warning(
-            f"{dl_file_count} files were downloaded, but based on {number_granules_requested} granules a downloaded file count of {dl_files_expected} is expected."
+            f"{dl_file_count} files were downloaded, but based on {number_tiles_requested} granules a downloaded file count of {dl_files_expected} is expected."
         )
     else:
         logging.info("Downloaded file count matches expectations.")
 
 
-if __name__ == "__main__":
-    log_file_path = os.path.join(os.path.expanduser("~"), "input_data_download.log")
-    logging.basicConfig(filename=log_file_path, level=logging.INFO)
+def download_tif():
+    """Wrapper function to download GeoTIFF files. Uses methods for conversion and reprojection that will not be available for future datasets.
+    These methods are retained for legacy support and may cease to function properly in the future.
 
-    wipe_old_downloads(snow_year_input_dir)
+    Args:
+        None
 
+    Returns:
+        None
+    """
     v = check_data_version(short_name)
-    ref_tiles = determine_tiles_for_bbox(viirs_params["bbox"])
     snow_year_chunks = generate_monthly_dl_chunks(int(SNOW_YEAR))
 
     api_session = start_api_session(short_name, v)
@@ -491,7 +461,9 @@ if __name__ == "__main__":
             time_chunk[1],
             viirs_params["bbox"],
         )
-        filtered_granules = filter_granules_based_on_tiles(granule_list, ref_tiles)
+        filtered_granules = filter_granules_based_on_tiles(
+            granule_list, needed_tile_ids
+        )
 
         page_num, request_mode, page_size = set_n_orders_and_mode_and_page_size(
             filtered_granules
@@ -510,7 +482,120 @@ if __name__ == "__main__":
         dl_urls = make_async_data_orders(page_num, api_session, dl_params)
         download_order(api_session, dl_urls, snow_year_input_dir)
         flatten_download_directory(snow_year_input_dir)
-        validate_download(snow_year_input_dir, len(granule_list))
+        # Parse month from time_chunk and get number of days in the month
+        start_date = datetime.strptime(time_chunk[0], "%Y-%m-%dT%H:%M:%SZ")
+        month = start_date.month
+        _, days_in_month = calendar.monthrange(int(SNOW_YEAR), month)
+        validate_download(
+            snow_year_input_dir, len(needed_tile_ids), days_in_month, n_variables=5
+        )
 
+    days_in_year = 366 if calendar.isleap(int(SNOW_YEAR)) else 365
+    validate_download(
+        snow_year_input_dir, len(needed_tile_ids), days_in_year, n_variables=5
+    )
     api_session.close()
+
+
+def download_h5(short_name=short_name):
+    """Wrapper function to download HDF5 files from the NSIDC DAAC using earthaccess API.
+    This is the preferred method for downloading VIIRS data.
+
+    Args:
+        short_name (str): The short name of the dataset. Default is stored in luts.py.
+
+    Returns:
+        None
+    """
+    import earthaccess
+
+    earthaccess.login(strategy="interactive")
+    snow_year_chunks = generate_monthly_dl_chunks(int(SNOW_YEAR))
+
+    for time_chunk in snow_year_chunks:
+        logging.info(f"Starting download for {time_chunk}.")
+        datasets = earthaccess.search_datasets(
+            short_name=short_name,
+        )
+        if len(datasets) == 1:
+            version = int(datasets[0]["umm"]["Version"])
+        else:
+            versions = [
+                int(ds["umm"]["Version"])
+                for ds in datasets
+                if "umm" in ds and "Version" in ds["umm"]
+            ]
+            version = max(versions) if versions else None
+        url_list = earthaccess.search_data(
+            short_name=short_name,
+            bounding_box=tuple(map(int, viirs_params["bbox"].split(","))),
+            temporal=(time_chunk[0], time_chunk[1]),
+            # daac='NSIDC', # Seems to work without this - but possible specifying daac is needed to avoid duplicates for some years/data
+            version=int(version),
+        )
+        if url_list:
+            # Filter to only needed tiles
+            url_list = [
+                url
+                for url in url_list
+                for tile_id in needed_tile_ids
+                if tile_id in url["umm"]["GranuleUR"]
+            ]
+            logging.info(
+                f"{len(url_list)} files match needed tiles for {time_chunk}. Downloading..."
+            )
+            if url_list:
+                earthaccess.download(url_list, local_path=snow_year_input_dir)
+            else:
+                logging.info(f"No files match needed tiles for {time_chunk}. Exiting.")
+                exit(1)
+
+            # Parse month from time_chunk and get number of days in the month
+            start_date = datetime.strptime(time_chunk[0], "%Y-%m-%dT%H:%M:%SZ")
+            month = start_date.month
+            _, days_in_month = calendar.monthrange(int(SNOW_YEAR), month)
+            validate_download(snow_year_input_dir, len(needed_tile_ids), days_in_month)
+
+        else:
+            logging.info(f"No files found for {time_chunk}. Exiting.")
+            exit(1)
+
+    days_in_year = 366 if calendar.isleap(int(SNOW_YEAR)) else 365
+    validate_download(snow_year_input_dir, len(needed_tile_ids), days_in_year)
+
+
+if __name__ == "__main__":
+    import argparse
+
+    log_file_path = os.path.join(os.path.expanduser("~"), "input_data_download.log")
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        filename=log_file_path,
+        level=logging.INFO,
+    )
+    parser = argparse.ArgumentParser(description="Download Script.")
+
+    parser.add_argument(
+        "--format",
+        "-f",
+        choices=["tif", "h5"],
+        default="h5",
+        help="Download/input File format: Older processing methods use tif, newer uses h5. Default is h5.",
+    )
+    parser.add_argument(
+        "--short_name",
+        type=str,
+        help="Dataset short name - will overwrite short_name from luts if used. Only usable with h5 download methods.",
+    )
+    args = parser.parse_args()
+    if args.short_name:
+        short_name = args.short_name
+
+    wipe_old_downloads(snow_year_input_dir)
+
+    if args.format == "tif":
+        download_tif()
+    else:
+        download_h5(short_name=short_name)
+
     print("Download Script Complete.")
